@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
 import { stripVTControlCharacters } from 'node:util';
 
@@ -17,6 +19,7 @@ export class AuthManager {
   #bin;
   #timeoutMs;
   #forceRemote;
+  #transport;
   #sessions = new Map();
   #finishing = new Map();
   #accepting = true;
@@ -25,11 +28,13 @@ export class AuthManager {
     bin = 'agy',
     timeoutMs = 900_000,
     forceRemote = true,
+    transport = 'pipe',
     environment = {},
   } = {}) {
     this.#bin = bin;
     this.#timeoutMs = timeoutMs;
     this.#forceRemote = forceRemote;
+    this.#transport = transport;
     this.environment = environment;
   }
 
@@ -64,7 +69,14 @@ export class AuthManager {
 
     let child;
     try {
-      child = spawn(this.#bin, args, {
+      const useTmux = this.#transport === 'tmux';
+      if (useTmux && process.platform === 'win32') {
+        throw new Error('tmux OAuth transport is unavailable on Windows');
+      }
+      const runner = path.join(path.dirname(fileURLToPath(import.meta.url)), 'auth-tmux.js');
+      child = spawn(useTmux ? process.execPath : this.#bin, useTmux
+        ? [runner, this.#bin, cwd, '--', ...args]
+        : args, {
         cwd,
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
