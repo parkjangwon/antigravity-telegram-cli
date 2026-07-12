@@ -54,7 +54,7 @@ assert.equal(
   `embedded bootstrap helper syntax failed: ${helperCheck.stderr || helperCheck.stdout}`,
 );
 
-if (process.env.GITHUB_REF_NAME) {
+if (process.env.GITHUB_REF_TYPE === 'tag') {
   assert.equal(
     process.env.GITHUB_REF_NAME,
     `v${AGYGRAM_VERSION}`,

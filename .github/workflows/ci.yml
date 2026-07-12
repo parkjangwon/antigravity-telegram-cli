@@ -56,10 +56,6 @@ jobs:
           }'
 
       - name: Run checks
-        env:
-          # Branch and pull-request CI validates internal release metadata; only the
-          # tag-triggered release workflow is allowed to assert the exact tag name.
-          GITHUB_REF_NAME: ''
         run: |
           npm run check
           npm run check:release
