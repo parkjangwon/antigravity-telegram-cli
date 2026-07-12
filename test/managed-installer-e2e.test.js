@@ -109,6 +109,7 @@ async function createFixtureArchive(root, version) {
     ...[
       'src/index.js',
       'src/doctor.js',
+      'src/setup.js',
       'src/config.js',
       'src/service/index.js',
       'src/service/file-runner.js',

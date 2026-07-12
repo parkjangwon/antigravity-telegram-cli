@@ -1,53 +1,55 @@
 # Antigravity Telegram CLI Bot
 
-[한국어](README.ko.md) · [Latest release](https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest) · [Installation guide](docs/MANAGED_INSTALL.md)
+[한국어](README.ko.md) · [Latest release](https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest) · [Install details](docs/MANAGED_INSTALL.md)
 
-Control Google Antigravity CLI (`agy`) from Telegram on macOS, Linux, or Windows. The bot runs headlessly as the current OS user; no IDE is required.
+Run Google Antigravity CLI (`agy`) from Telegram on macOS, Linux, or Windows. It is built for headless servers: no IDE, no desktop session for daily use, and first authentication happens from Telegram.
 
-## What you get
+## Quick Start
 
-- Telegram conversations, plans, sandboxed code execution, uploads, jobs, and retry/recovery.
-- Full Telegram OAuth: open the displayed URL anywhere, send the code to the bot, and it completes/validates the first-run CLI setup.
-- Owner-only `/update apply` for an official, clean source checkout.
-- A per-user native service: launchd, systemd user service, or Task Scheduler.
-- Safe defaults: plan mode, sandbox enabled, narrow allowlists, bounded execution and storage.
+Before you start, create a Telegram bot with [@BotFather](https://t.me/BotFather), keep the bot token ready, and make sure `agy` works for the same OS user.
 
-## Requirements
+macOS or Linux:
 
-- Node.js **22 or 24**
-- A native `agy` executable available to the same OS user as the bot (`agy.exe` on Windows)
-- Telegram bot token, allowed chat ID, and owner user ID
-
-Use a dedicated low-privilege OS account and a narrow workspace. This is a trusted-operator bot, not a multi-tenant sandbox.
-
-## Install
-
-Use the verified one-line installer from the [managed installation guide](docs/MANAGED_INSTALL.md). It keeps code, configuration, data, and workspace separate; rerunning it updates or repairs the installation.
-
-On first run, edit the generated `.env` with at least:
-
-```dotenv
-BOT_TOKEN=123456:replace-me
-ALLOWED_CHAT_IDS=<your-private-chat-id>
-OWNER_USER_IDS=<your-private-user-id>
-AGY_BIN=/absolute/path/to/agy
-WORKSPACE_DIR=/absolute/path/to/workspace
+```sh
+(umask 077; f=$(mktemp "${TMPDIR:-/tmp}/agygram-install.XXXXXXXX") || exit; trap 'rm -f "$f"' 0 HUP INT TERM; curl -qfsSL --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 3 -o "$f" https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest/download/install.sh && sh -n "$f" && sh "$f" --setup)
 ```
 
-Then rerun the installer. On Windows, complete the documented ACL review and set `WINDOWS_ACL_VERIFIED=true` before service installation.
+Windows PowerShell:
 
-For a development/source checkout, see [Cross-platform operations](docs/CROSS_PLATFORM_OPERATIONS.md).
+```powershell
+& { $ErrorActionPreference = 'Stop'; $d = Join-Path ([IO.Path]::GetTempPath()) ("agygram-install-{0}" -f [Guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $d | Out-Null; $f = Join-Path $d 'install.ps1'; Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -Uri 'https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest/download/install.ps1' -OutFile $f; powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $f --setup; Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+```
 
-## First authentication
+The setup wizard will:
 
-1. Send `/start` from an allowed chat.
-2. In the owner's private chat, send `/auth`.
-3. Open the OAuth URL on any browser and send the returned code as a normal Telegram message.
-4. The bot completes the CLI's first-run setup and verifies the credential with a real headless request.
+1. Ask for your Telegram bot token.
+2. Ask you to send `/start` to the bot, then auto-detect your private chat ID and owner user ID.
+3. Find `agy`, write a private `.env`, create data/workspace directories, and install the native user service when the platform checks pass.
 
-One OS user/keyring means one effective Antigravity account shared by every allowed chat on that bot instance.
+Then open Telegram and send `/auth` to the bot. It will show the Antigravity OAuth URL, accept the returned code as a Telegram message, and verify the credential with a real headless request.
 
-## Telegram commands
+## What You Get
+
+- Telegram control for `agy`: chat, plan/apply, model/agent/mode switching, uploads, jobs, retries, and result recovery.
+- Headless OAuth designed for remote Linux servers and other no-IDE environments.
+- Managed per-user service: launchd on macOS, systemd user service on Linux, Task Scheduler on Windows.
+- Verified release installer/updater and data-preserving uninstaller.
+- Conservative defaults: sandbox on, owner-only auth/update, allowlists, execution limits, storage limits.
+
+## Day-Two Commands
+
+After the launcher directory printed by the installer is on `PATH`:
+
+```sh
+agygram --version
+agygram doctor
+agygram service status
+agygram setup
+```
+
+Rerun the same install command any time to update or repair the managed installation. From a clean source checkout, owners can also use `/update` and `/update apply` in Telegram.
+
+## Telegram Commands
 
 | Command | Purpose |
 | --- | --- |
@@ -57,19 +59,19 @@ One OS user/keyring means one effective Antigravity account shared by every allo
 | `/model`, `/agent`, `/mode`, `/sandbox` | Inspect or change session execution settings. |
 | `/status`, `/jobs`, `/last`, `/retry` | Inspect or recover work. |
 | `/auth` / `/cancel` | Authenticate or cancel the current request. |
-| `/update` / `/update apply` | Check for and apply an immutable official release (source checkout only). |
+| `/update` / `/update apply` | Check and apply an official immutable release. |
 | `/info`, `/reset`, `/help` | Inspect, reset, or show help. |
 
-Documents and photos are placed in an isolated upload directory for that single request.
+Documents and photos are stored in an isolated upload directory for the single request that uses them.
 
-## Security and operations
+## Important Notes
 
+- Use a dedicated low-privilege OS account and a narrow workspace. This is a trusted-operator tool, not a multi-tenant sandbox.
+- One OS user/keyring means one effective Antigravity account shared by every allowed chat on that bot instance.
 - Keep `ALLOW_UNSANDBOXED_RUNS=false` unless you deliberately accept unsandboxed agent execution.
-- Group chats require `ALLOWED_USER_IDS`; only configured owners can authenticate or update.
-- Do not put secrets in prompts: `agy --print` arguments can be visible to privileged local processes.
-- Use `agygram doctor` and `agygram service status` for managed installations.
+- Windows service installation requires a config/data ACL review before `WINDOWS_ACL_VERIFIED=true`; the wizard prepares the config but does not fake that attestation.
 
-For limits, service behavior, threat boundaries, rollback, and platform-specific troubleshooting, read [Cross-platform operations](docs/CROSS_PLATFORM_OPERATIONS.md) and [design notes](docs/DESIGN.md).
+Full installer options, rollback behavior, release verification, Windows ACL commands, and troubleshooting live in [Managed install, update, and uninstall](docs/MANAGED_INSTALL.md). Service paths and platform operations are in [Cross-platform operations](docs/CROSS_PLATFORM_OPERATIONS.md).
 
 ## License
 

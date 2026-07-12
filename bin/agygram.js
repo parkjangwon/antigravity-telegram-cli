@@ -14,6 +14,7 @@ import {
   resolveServiceDataDir,
 } from '../src/service/runtime-paths.js';
 import { assertRuntimeFilesystemTrust } from '../src/runtime-trust.js';
+import { setupCommand } from '../src/setup.js';
 import { AGYGRAM_VERSION } from '../src/version.js';
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,6 +22,7 @@ const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const USAGE = `agygram — Antigravity Telegram CLI operations
 
 Usage:
+  agygram setup [--config-file <path>] [--data-dir <path>] [--workspace-dir <path>] [--agy-bin <path>]
   agygram doctor [--config-file <path>] [--data-dir <path>]
   agygram service install [--dry-run] [--config-file <path>] [--data-dir <path>]
   agygram service uninstall [--dry-run] [--config-file <path>] [--data-dir <path>]
@@ -33,6 +35,8 @@ Options:
   --node <path>           Absolute Node.js executable path
   --config-file <path>    Absolute config file (default: project/.env)
   --data-dir <path>       Absolute runtime data directory (overrides DATA_DIR)
+  --workspace-dir <path>  Absolute workspace directory for agy work
+  --agy-bin <path>        Absolute agy executable path for setup
   --home <path>           Target user's absolute home path (cross-OS dry-run)
   --uid <number>          Target macOS uid (cross-OS dry-run)
   --windows-user <id>     Target DOMAIN\\user (cross-OS dry-run)
@@ -275,6 +279,14 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const [command, ...commandArguments] = argv;
+  if (command === 'setup') {
+    if (commandArguments.length === 1 && isHelp(commandArguments[0])) {
+      process.stdout.write(USAGE);
+      return 0;
+    }
+    await setupCommand(commandArguments, { projectDir: PROJECT_DIR });
+    return 0;
+  }
   if (command === 'doctor') {
     if (commandArguments.length === 1 && isHelp(commandArguments[0])) {
       process.stdout.write(USAGE);

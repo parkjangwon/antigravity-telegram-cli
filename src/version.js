@@ -1,1 +1,1 @@
-export const AGYGRAM_VERSION = '0.1.3';
+export const AGYGRAM_VERSION = '0.2.0';

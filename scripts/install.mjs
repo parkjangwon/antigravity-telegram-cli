@@ -74,6 +74,7 @@ Options:
   --install-root <path>     Managed code root
   --config-file <path>      External configuration file
   --agy-bin <path>          Absolute agy executable
+  --setup                   Run the interactive first-run setup wizard
   --no-service              Install/update code but leave native service removed
   --allow-downgrade         Explicitly permit a lower target version
   -h, --help                Show this help
@@ -98,6 +99,7 @@ function parseOptions(argv) {
   const options = {
     noService: false,
     allowDowngrade: false,
+    setup: false,
   };
   const seen = new Set();
   for (let index = 0; index < argv.length; index += 1) {
@@ -110,6 +112,7 @@ function parseOptions(argv) {
     seen.add(item);
     if (item === '--no-service') options.noService = true;
     else if (item === '--allow-downgrade') options.allowDowngrade = true;
+    else if (item === '--setup') options.setup = true;
     else if ([
       '--version',
       '--tag',
@@ -1135,6 +1138,7 @@ const REQUIRED_RELEASE_FILES = [
   'scripts/uninstall.mjs',
   'src/index.js',
   'src/doctor.js',
+  'src/setup.js',
   'src/config.js',
   'src/service/index.js',
   'src/service/file-runner.js',
@@ -1662,6 +1666,8 @@ if (forwarded[0] === 'service' && ['install', 'uninstall'].includes(forwarded[1]
 }
 if (!helpOnly && forwarded[0] === 'doctor') {
   forwarded.push('--config-file', manifest.configFile, '--data-dir', manifest.dataDir);
+} else if (!helpOnly && forwarded[0] === 'setup') {
+  forwarded.push('--config-file', manifest.configFile, '--data-dir', manifest.dataDir);
 } else if (!helpOnly && forwarded[0] === 'service') {
   forwarded.push(
     '--project-dir', release,
@@ -1758,6 +1764,26 @@ async function invokeAgygram(releaseDir, action, external, { allowFailure = fals
   return runCommand(process.execPath, ['--', ...args], {
     cwd: releaseDir,
     allowFailure,
+    env: external.serviceEnvironment?.xdgConfigHome
+      ? { XDG_CONFIG_HOME: external.serviceEnvironment.xdgConfigHome }
+      : {},
+  });
+}
+
+async function invokeSetup(releaseDir, external) {
+  const entry = path.join(releaseDir, 'bin', 'agygram.js');
+  return runCommand(process.execPath, [
+    '--',
+    entry,
+    'setup',
+    '--config-file',
+    external.configFile,
+    '--data-dir',
+    external.dataDir,
+    '--agy-bin',
+    external.agyBin,
+  ], {
+    cwd: releaseDir,
     env: external.serviceEnvironment?.xdgConfigHome
       ? { XDG_CONFIG_HOME: external.serviceEnvironment.xdgConfigHome }
       : {},
@@ -2284,13 +2310,25 @@ async function main(argv = process.argv.slice(2)) {
       dataDir: installed?.dataDir || defaults.dataDir,
       workspaceDir: installed?.workspaceDir || defaults.workspaceDir,
     };
-    const external = await prepareExternalConfiguration(
+    let external = await prepareExternalConfiguration(
       prepared.releaseDir,
       preservedDefaults,
       options,
       installRoot,
     );
     pendingExternal = external;
+    if (options.setup && external.incomplete.length > 0) {
+      await applyExternalConfiguration(external);
+      process.stdout.write('Starting interactive setup wizard...\n');
+      await invokeSetup(prepared.releaseDir, external);
+      external = await prepareExternalConfiguration(
+        prepared.releaseDir,
+        preservedDefaults,
+        options,
+        installRoot,
+      );
+      pendingExternal = external;
+    }
     for (const [name, externalPath] of [
       ['configuration', external.configFile],
       ['data', external.dataDir],

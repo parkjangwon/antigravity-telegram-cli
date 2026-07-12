@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 — 2026-07-12
+
+- Add `agygram setup`, an interactive onboarding wizard that validates the
+  Telegram bot token, auto-detects a private Telegram chat/user after `/start`,
+  writes the external `.env`, and prepares data/workspace paths.
+- Add managed installer `--setup` so first install can go from verified release
+  download to service installation without hand-editing `.env` on macOS/Linux.
+- Refresh English and Korean READMEs around the shorter setup journey.
+
 ## 0.1.3 — 2026-07-12
 
 - Remove personal Telegram identifiers from all public examples and history.

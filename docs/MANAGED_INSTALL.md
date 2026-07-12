@@ -2,7 +2,7 @@
 
 The release installer is the recommended way to run `agygram` as a current-user service. It keeps immutable application releases separate from configuration, runtime data, and the workspace. The same command performs a first install, an update, or reconciliation of managed state such as launchers, configuration, and the native service. It verifies an existing immutable release but does not rewrite damaged live code in place.
 
-The current public bootstrap is pinned to **0.1.3**. `install.sh` and `install.ps1` embedded in that release select the stable `v0.1.3` release, resolve its exact Git commit, and verify the downloaded installer and package before running them. A future release updates the version embedded in its own bootstrap; `releases/latest/download/...` then serves that new, independently pinned bootstrap.
+The current public bootstrap is pinned to **0.2.0**. `install.sh` and `install.ps1` embedded in that release select the stable `v0.2.0` release, resolve its exact Git commit, and verify the downloaded installer and package before running them. A future release updates the version embedded in its own bootstrap; `releases/latest/download/...` then serves that new, independently pinned bootstrap.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ The current public bootstrap is pinned to **0.1.3**. `install.sh` and `install.p
 - Node.js **22 or 24**, including the npm CLI distributed with Node. Other Node major versions are rejected.
 - An installed Antigravity CLI available to that same account. The tested compatibility baseline is `agy 1.1.1`; this is not a promise that every later undocumented CLI log format is compatible.
 - On Windows, a native `agy.exe`. An npm `agy.cmd`, `.bat`, or `.ps1` shim is rejected.
-- A Telegram bot token and numeric chat/user IDs.
+- A Telegram bot token. The `--setup` wizard can auto-detect your private numeric chat/user IDs after you send `/start` to the bot.
 - Direct HTTPS access to GitHub release/API endpoints and to the configured npm registry/package CDN, plus a working OS credential store for the service account.
 - For the convenience command below, `curl` plus normal POSIX utilities on macOS/Linux, or Windows PowerShell 5.1 / PowerShell 7 on Windows.
 - For a managed service: launchd in a macOS GUI login session, a systemd user manager on Linux, or Task Scheduler on Windows. A first code-only install with `--no-service` does not attempt to install the service.
@@ -24,13 +24,13 @@ These commands download the bootstrap to a private temporary file and execute th
 ### macOS and Linux
 
 ```sh
-(umask 077; f=$(mktemp "${TMPDIR:-/tmp}/agygram-install.XXXXXXXX") || exit; trap 'exit 1' HUP INT TERM; trap 'rm -f "$f"' 0; curl -q --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 3 -o "$f" https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest/download/install.sh && [ -s "$f" ] && [ "$(wc -c < "$f")" -le 1048576 ] && sh -n "$f" && sh "$f")
+(umask 077; f=$(mktemp "${TMPDIR:-/tmp}/agygram-install.XXXXXXXX") || exit; trap 'exit 1' HUP INT TERM; trap 'rm -f "$f"' 0; curl -q --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 10 --max-time 120 --retry 3 -o "$f" https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest/download/install.sh && [ -s "$f" ] && [ "$(wc -c < "$f")" -le 1048576 ] && sh -n "$f" && sh "$f" --setup)
 ```
 
 ### Windows PowerShell
 
 ```powershell
-& { $ErrorActionPreference = 'Stop'; $tls = [Net.ServicePointManager]::SecurityProtocol; $d = Join-Path ([IO.Path]::GetTempPath()) ("agygram-install-{0}" -f [Guid]::NewGuid().ToString('N')); try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; New-Item -ItemType Directory -Path $d | Out-Null; $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $grant = "*${sid}:(OI)(CI)(F)"; $systemDir = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::System); $icacls = Join-Path $systemDir 'icacls.exe'; if (-not (Test-Path -LiteralPath $icacls -PathType Leaf)) { throw 'Could not locate system icacls.exe' }; & $icacls $d /inheritance:r /grant:r $grant | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Could not protect the temporary directory' }; $f = Join-Path $d 'install.ps1'; $ok = $false; for ($i = 1; $i -le 3 -and -not $ok; $i++) { try { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -MaximumRedirection 5 -Uri 'https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest/download/install.ps1' -OutFile $f; $ok = $true } catch { if ($i -eq 3) { throw }; Start-Sleep -Seconds $i } }; $n = (Get-Item -LiteralPath $f).Length; if ($n -lt 1 -or $n -gt 1MB) { throw 'Unexpected bootstrap size' }; $exe = (Get-Process -Id $PID).Path; & $exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $f; if ($LASTEXITCODE -ne 0) { throw "Installer exited with code $LASTEXITCODE" } } finally { [Net.ServicePointManager]::SecurityProtocol = $tls; Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
+& { $ErrorActionPreference = 'Stop'; $tls = [Net.ServicePointManager]::SecurityProtocol; $d = Join-Path ([IO.Path]::GetTempPath()) ("agygram-install-{0}" -f [Guid]::NewGuid().ToString('N')); try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; New-Item -ItemType Directory -Path $d | Out-Null; $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $grant = "*${sid}:(OI)(CI)(F)"; $systemDir = [Environment]::GetFolderPath([System.Environment+SpecialFolder]::System); $icacls = Join-Path $systemDir 'icacls.exe'; if (-not (Test-Path -LiteralPath $icacls -PathType Leaf)) { throw 'Could not locate system icacls.exe' }; & $icacls $d /inheritance:r /grant:r $grant | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'Could not protect the temporary directory' }; $f = Join-Path $d 'install.ps1'; $ok = $false; for ($i = 1; $i -le 3 -and -not $ok; $i++) { try { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue; Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -MaximumRedirection 5 -Uri 'https://github.com/parkjangwon/antigravity-telegram-cli/releases/latest/download/install.ps1' -OutFile $f; $ok = $true } catch { if ($i -eq 3) { throw }; Start-Sleep -Seconds $i } }; $n = (Get-Item -LiteralPath $f).Length; if ($n -lt 1 -or $n -gt 1MB) { throw 'Unexpected bootstrap size' }; $exe = (Get-Process -Id $PID).Path; & $exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $f --setup; if ($LASTEXITCODE -ne 0) { throw "Installer exited with code $LASTEXITCODE" } } finally { [Net.ServicePointManager]::SecurityProtocol = $tls; Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } }
 ```
 
 The command uses `-ExecutionPolicy Bypass` only in the short-lived child process that executes the downloaded file; it does not weaken machine- or user-wide policy. Enterprise policy can still reject it.
@@ -41,7 +41,9 @@ Rerun the same command to update or reconcile managed launchers/configuration/se
 
 The first run locates `agy` (or uses `--agy-bin`), installs production dependencies with lifecycle scripts disabled, writes an external `.env` from the packaged example if one does not exist, and fills in absolute `AGY_BIN`, `DATA_DIR`, and `WORKSPACE_DIR` values. It never reads or writes Antigravity OAuth token files.
 
-The initial `.env` has no Telegram secret or allowlist. Therefore the first run normally installs the code and launcher but deliberately leaves the native service uninstalled. Edit the path printed as `Config`, at minimum:
+With `--setup`, the installer starts an interactive wizard after the verified release is unpacked. The wizard asks for the Telegram bot token, validates it with Telegram, asks you to send `/start` to the bot, and auto-detects the private chat ID and owner user ID when possible. It then rewrites the external `.env` and the installer immediately rechecks the configuration before deciding whether to install the native service.
+
+If you run without `--setup`, or if Telegram auto-detection cannot be used, edit the path printed as `Config`, at minimum:
 
 ```dotenv
 BOT_TOKEN=123456:replace-me
@@ -107,11 +109,12 @@ Verify the active release after adding the launcher to PATH:
 
 ```text
 agygram --version
+agygram setup
 agygram doctor
 agygram service status
 ```
 
-For this release, `agygram --version` must print `0.1.3`. Telegram `/info` also includes the running `agygram` version. The installer prints its resolved `Current` and `Target` version/commit identities.
+For this release, `agygram --version` must print `0.2.0`. Telegram `/info` also includes the running `agygram` version. The installer prints its resolved `Current` and `Target` version/commit identities.
 
 ## Installer options
 
@@ -121,6 +124,7 @@ Arguments after the downloaded bootstrap are forwarded to the verified installer
 --install-root <path>  Use a different managed code root.
 --config-file <path>   Use a different external .env file.
 --agy-bin <path>       Pin an absolute agy executable (agy.exe on Windows).
+--setup                Run the interactive first-run setup wizard.
 --no-service           Install/update code and ensure the native service is removed.
 --allow-downgrade      Explicitly allow a lower SemVer target.
 ```
@@ -189,7 +193,7 @@ For independent verification, download the assets from the [GitHub release](http
 
 ```sh
 gh attestation verify ./install.sh --repo parkjangwon/antigravity-telegram-cli
-gh attestation verify ./antigravity-telegram-cli-0.1.3.tgz --repo parkjangwon/antigravity-telegram-cli
+gh attestation verify ./antigravity-telegram-cli-0.2.0.tgz --repo parkjangwon/antigravity-telegram-cli
 ```
 
 Attestation verification requires a current authenticated GitHub CLI. A checksum detects mismatch against the downloaded checksum list; a verified GitHub attestation additionally binds an asset to this repository's release workflow.
@@ -198,7 +202,7 @@ Attestation verification requires a current authenticated GitHub CLI. A checksum
 
 - **`Node.js 22 or 24 is required`**: make the intended supported Node installation first on PATH. The same installation must include npm. Reinstall the service after replacing a version-manager Node path.
 - **`agy executable was not found`**: pass its absolute native path with `--agy-bin`. On Windows, locate `agy.exe`, not `agy.cmd`.
-- **Service remains uninstalled**: edit the printed configuration path. Supply valid `BOT_TOKEN` and `ALLOWED_CHAT_IDS`; on Windows also finish the config-directory/file and data-directory DACL review and attestation. A managed config rewrite resets that attestation, so recheck it after an update or path change. Rerun the same installer and read the `doctor` failure if it still cannot install.
+- **Service remains uninstalled**: run `agygram setup` or edit the printed configuration path. Supply valid `BOT_TOKEN`, `ALLOWED_CHAT_IDS`, and `OWNER_USER_IDS`; on Windows also finish the config-directory/file and data-directory DACL review and attestation. A managed config rewrite resets that attestation, so recheck it after an update or path change. Rerun the same installer and read the `doctor` failure if it still cannot install.
 - **A custom install cannot be found during uninstall**: pass `--install-root <same absolute path>` or set `AGYGRAM_INSTALL_ROOT`.
 - **Linux service stops after logout or cannot reach credentials**: inspect `systemctl --user status antigravity-telegram-cli.service`; linger may require administrator policy, and the service account still needs a working D-Bus/Secret Service session. Uninstall intentionally does not disable linger.
 - **macOS service cannot access credentials**: a LaunchAgent requires a user GUI login and an accessible Keychain for that account.

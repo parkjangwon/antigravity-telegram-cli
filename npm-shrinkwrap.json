@@ -1,12 +1,12 @@
 {
   "name": "antigravity-telegram-cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "antigravity-telegram-cli",
-      "version": "0.1.3",
+      "version": "0.2.0",
       "license": "MIT",
       "dependencies": {
         "@homebridge/node-pty-prebuilt-multiarch": "0.13.1",

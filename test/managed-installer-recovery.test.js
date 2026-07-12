@@ -10,6 +10,19 @@ import { _private } from '../scripts/install.mjs';
 const OWNER = 'agygram-managed-installer';
 const REPOSITORY = 'parkjangwon/antigravity-telegram-cli';
 
+test('managed installer parses setup mode as an explicit onboarding option', () => {
+  const options = _private.parseOptions([
+    '--version', '0.2.0',
+    '--commit', 'a'.repeat(40),
+    '--setup',
+    '--no-service',
+  ]);
+
+  assert.equal(options.setup, true);
+  assert.equal(options.noService, true);
+  assert.equal(options.version, '0.2.0');
+});
+
 function manifest(root, version, commit, configFile, { previousRelease = null } = {}) {
   const currentRelease = `v${version}-${commit}`;
   const launcherDir = path.join(root, 'bin');
