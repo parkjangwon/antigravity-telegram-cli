@@ -229,6 +229,27 @@ test('AgyClient builds argument arrays without shell interpolation', () => {
   assert.equal(args.at(-1), prompt);
 });
 
+test('AgyClient adds unsandboxed auto-approve only when explicitly enabled', () => {
+  const session = {
+    conversationId: null,
+    projectId: null,
+    model: null,
+    agent: null,
+    mode: 'accept-edits',
+    sandbox: false,
+    newProject: true,
+  };
+  const safeClient = new AgyClient({ timeoutMs: 20_000 });
+  const yoloClient = new AgyClient({ timeoutMs: 20_000, allowUnsandboxedAutoApprove: true });
+
+  const safeArgs = safeClient.buildPromptArgs({ prompt: 'x', session });
+  const yoloArgs = yoloClient.buildPromptArgs({ prompt: 'x', session });
+
+  assert.equal(safeArgs.includes('--dangerously-skip-permissions'), false);
+  assert.equal(yoloArgs.includes('--sandbox'), false);
+  assert.equal(yoloArgs.includes('--dangerously-skip-permissions'), true);
+});
+
 test('runProcess passes hostile-looking values literally', async () => {
   const payload = '$(printf injected); `whoami`; hello world';
   const result = await runProcess(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', payload], {

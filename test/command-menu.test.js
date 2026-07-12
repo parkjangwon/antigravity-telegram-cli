@@ -7,7 +7,7 @@ test('command menu includes only the current bot commands', () => {
   assert.deepEqual(
     BOT_COMMANDS.map(({ command }) => command),
     [
-      'start', 'plan', 'apply', 'new', 'model', 'agent', 'mode', 'sandbox',
+      'start', 'plan', 'apply', 'new', 'model', 'agent', 'skills', 'mode', 'sandbox', 'yolo',
       'workspace', 'project', 'info', 'status', 'last', 'jobs', 'retry', 'auth',
       'update', 'cancel', 'reset', 'help',
     ],

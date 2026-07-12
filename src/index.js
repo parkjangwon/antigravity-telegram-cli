@@ -51,6 +51,7 @@ import {
   formatChoiceMenuText,
   parseChoiceCallback,
 } from './interactive-ui.js';
+import { buildPromptWithSkill, filterSkills, listAgySkills } from './skills.js';
 import {
   commandArgument,
   classifyUpdateAge,
@@ -107,8 +108,10 @@ const HELP_TEXT = `agygram
 /apply [추가 지시] — 직전 계획을 sandbox code 모드로 실행
 /model [이름|default] — 모델 목록을 버튼으로 조회·전환
 /agent [이름|default] — 에이전트 목록을 버튼으로 조회·전환
-/mode [plan|code|accept-edits] — 실행 모드를 버튼으로 전환
+/skills [검색어] — 설치된 agent skill을 페이지 버튼으로 선택
+/mode [plan|code|accept-edits|yolo] — 실행 모드를 버튼으로 전환
 /sandbox [on|off] — 샌드박스를 버튼으로 조회·설정
+/yolo [on|off] — accept-edits + unsandboxed 자동 승인 전환
 /workspace [경로] — 허용된 작업공간 조회 또는 전환
 /project [ID|clear] — 명시적 agy 프로젝트 지정
 /info — 현재 세션 상태
@@ -413,6 +416,7 @@ async function main() {
       newProject: session.newProject,
       model: requested.model,
       agent: requested.agent,
+      skill: requested.skill,
       mode: requested.mode,
       sandbox: config.allowUnsandboxedRuns ? requested.sandbox : true,
       historyDigest: historyDigest(session.history),
@@ -435,6 +439,7 @@ async function main() {
       'newProject',
       'model',
       'agent',
+      'skill',
       'historyDigest',
       'executionGeneration',
       'sessionRevision',
@@ -562,6 +567,7 @@ async function main() {
     choices,
     hint,
     columns = 1,
+    edit = false,
   }) => {
     cleanupInteractiveMenus();
     const menu = createChoiceMenu({
@@ -571,9 +577,10 @@ async function main() {
       choices,
     });
     interactiveMenus.set(menu.token, menu);
-    await ctx.reply(formatChoiceMenuText({ title, current, hint }), {
-      reply_markup: buildChoiceKeyboard(menu.token, menu.choices, { columns }),
-    });
+    const text = formatChoiceMenuText({ title, current, hint });
+    const extra = { reply_markup: buildChoiceKeyboard(menu.token, menu.choices, { columns }) };
+    if (edit) await ctx.editMessageText(text, extra).catch(() => ctx.reply(text, extra));
+    else await ctx.reply(text, extra);
   };
   const acknowledgeChoice = async (ctx, text, { alert = false } = {}) => {
     const message = String(text || '').length > 180
@@ -597,14 +604,64 @@ async function main() {
   const finishChoiceMessage = async (ctx, text) => {
     await ctx.editMessageText(text).catch(() => ctx.reply(text));
   };
-  const modeChoices = (current) => [
+  const yoloPolicyError = () => {
+    if (!config.allowUnsandboxedRuns) {
+      return 'YOLO mode는 ALLOW_UNSANDBOXED_RUNS=true가 필요합니다. 전용 저권한 계정과 좁은 workspace에서만 켜세요.';
+    }
+    if (!config.allowUnsandboxedAutoApprove) {
+      return 'YOLO mode는 ALLOW_UNSANDBOXED_AUTO_APPROVE=true가 필요합니다. 이 설정은 --dangerously-skip-permissions를 unsandboxed로 사용합니다.';
+    }
+    return null;
+  };
+  const isYoloSession = (session) => session.mode === 'accept-edits' && session.sandbox === false;
+  const yoloStatus = (session) => {
+    if (isYoloSession(session)) {
+      return config.allowUnsandboxedAutoApprove
+        ? '켜짐 (accept-edits + unsandboxed + dangerously-skip-permissions)'
+        : '요청됨, 하지만 자동 승인 정책 꺼짐';
+    }
+    return '꺼짐';
+  };
+  const enableYolo = async (key) => {
+    const policyError = yoloPolicyError();
+    if (policyError) return policyError;
+    await state.update(key, (session) => ({
+      ...session,
+      mode: 'accept-edits',
+      sandbox: false,
+    }));
+    return null;
+  };
+  const disableYolo = async (key) => {
+    await state.update(key, (session) => ({
+      ...session,
+      mode: 'accept-edits',
+      sandbox: true,
+    }));
+  };
+  const yoloChoices = (session) => [
     {
-      label: `${currentMarker('plan', current)}Plan · 수정 없이 계획`,
+      label: `${isYoloSession(session) ? '✓ ' : ''}YOLO 켜기 · 묻지 않고 실행`,
+      action: 'yolo-on',
+    },
+    {
+      label: `${!isYoloSession(session) ? '✓ ' : ''}YOLO 끄기 · sandbox code`,
+      action: 'yolo-off',
+    },
+    { label: '닫기', action: 'cancel' },
+  ];
+  const modeChoices = (session) => [
+    {
+      label: `${currentMarker('plan', session.mode)}Plan · 수정 없이 계획`,
       value: 'plan',
     },
     {
-      label: `${currentMarker('accept-edits', current)}Code · 파일 수정 허용`,
+      label: `${session.mode === 'accept-edits' && session.sandbox !== false ? '✓ ' : ''}Code · 파일 수정 허용`,
       value: 'accept-edits',
+    },
+    {
+      label: `${isYoloSession(session) ? '✓ ' : ''}YOLO · 묻지 않고 수정`,
+      action: 'yolo-on',
     },
     { label: '닫기', action: 'cancel' },
   ];
@@ -630,6 +687,64 @@ async function main() {
     })),
     { label: '닫기', action: 'cancel' },
   ];
+  const skillPageSize = 8;
+  const formatSkillLabel = (skill, activeSkill) => {
+    const prefix = skill.name === activeSkill ? '✓ ' : '';
+    const description = skill.description ? ` — ${skill.description}` : '';
+    return `${prefix}${skill.name}${description}`;
+  };
+  const skillChoices = ({ skills, page, query, activeSkill }) => {
+    const totalPages = Math.max(1, Math.ceil(skills.length / skillPageSize));
+    const safePage = Math.min(totalPages - 1, Math.max(0, page));
+    const visible = skills.slice(safePage * skillPageSize, (safePage + 1) * skillPageSize);
+    const choices = visible.map((skill) => ({
+      label: formatSkillLabel(skill, activeSkill),
+      value: skill.name,
+      action: 'skill-set',
+    }));
+    if (skills.length > 0) {
+      choices.push({
+        label: `페이지 ${safePage + 1}/${totalPages}`,
+        action: 'noop',
+      });
+    }
+    const navigation = [];
+    if (safePage > 0) {
+      navigation.push({ label: '◀ 이전', action: 'skills-page', page: safePage - 1, query });
+    }
+    if (safePage < totalPages - 1) {
+      navigation.push({ label: '다음 ▶', action: 'skills-page', page: safePage + 1, query });
+    }
+    choices.push(...navigation);
+    choices.push({ label: '선택 해제', action: 'skill-clear' });
+    choices.push({ label: '닫기', action: 'cancel' });
+    return { choices, page: safePage, totalPages };
+  };
+  const openSkillsMenu = async (ctx, { query = '', page = 0, edit = false, signal } = {}) => {
+    const session = state.get(sessionKey(ctx));
+    const allSkills = await listAgySkills({ env: process.env, signal });
+    const skills = filterSkills(allSkills, query);
+    const { choices, page: safePage, totalPages } = skillChoices({
+      skills,
+      page,
+      query,
+      activeSkill: session.skill,
+    });
+    const searchText = query ? ` · 검색: ${query}` : '';
+    const emptyHint = query
+      ? '검색 결과가 없습니다. /skills 로 전체 목록을 다시 열 수 있습니다.'
+      : '발견된 SKILL.md가 없습니다. Antigravity skill 또는 plugin 설치 상태를 확인하세요.';
+    await openChoiceMenu(ctx, {
+      type: 'skills',
+      title: `Agent skills${searchText}`,
+      current: session.skill || '선택 안 함',
+      choices,
+      hint: skills.length > 0
+        ? `총 ${skills.length}개 · ${safePage + 1}/${totalPages}페이지. 스킬을 누르면 이후 요청에 적용됩니다. 검색: /skills 키워드`
+        : emptyHint,
+      edit,
+    });
+  };
 
   const runAgyRequest = async (ctx, prepareRequest, journalJob = null) => {
     const chatId = sessionKey(ctx);
@@ -668,6 +783,7 @@ async function main() {
               newProject: pinnedContext.newProject,
               model: pinnedContext.model,
               agent: pinnedContext.agent,
+              skill: pinnedContext.skill,
               mode: pinnedContext.mode,
               sandbox: pinnedContext.sandbox,
             }
@@ -676,9 +792,10 @@ async function main() {
           ...requestedSession,
           sandbox: config.allowUnsandboxedRuns ? requestedSession.sandbox : true,
         };
+        const skillPrompt = buildPromptWithSkill(prompt, executionSession.skill);
         const effectivePrompt = session.conversationId
-          ? prompt
-          : buildPromptWithHistory(prompt, session.history, config.historyMaxChars);
+          ? skillPrompt
+          : buildPromptWithHistory(skillPrompt, session.history, config.historyMaxChars);
         job.update('waiting-workspace', { workspace: cwd, kind: prepared.kind || 'prompt' });
         const result = await workspaceLocks.run(
           cwd,
@@ -1006,6 +1123,51 @@ async function main() {
     }
     await runChoiceControl(ctx, async () => {
       const key = sessionKey(ctx);
+      if (choice.action === 'yolo-on') {
+        const policyError = await enableYolo(key);
+        if (policyError) {
+          await acknowledgeChoice(ctx, policyError, { alert: true });
+          return;
+        }
+        await acknowledgeChoice(ctx, 'YOLO mode를 켰습니다.');
+        await finishChoiceMessage(ctx, 'YOLO mode: 켜짐\naccept-edits + unsandboxed + --dangerously-skip-permissions');
+        interactiveMenus.delete(menu.token);
+        return;
+      }
+      if (choice.action === 'yolo-off') {
+        await disableYolo(key);
+        await acknowledgeChoice(ctx, 'YOLO mode를 껐습니다.');
+        await finishChoiceMessage(ctx, 'YOLO mode: 꺼짐\nsandbox code 모드로 전환했습니다.');
+        interactiveMenus.delete(menu.token);
+        return;
+      }
+      if (choice.action === 'skills-page') {
+        await acknowledgeChoice(ctx, '페이지를 이동합니다.');
+        interactiveMenus.delete(menu.token);
+        await openSkillsMenu(ctx, { query: choice.query || '', page: choice.page || 0, edit: true });
+        return;
+      }
+      if (choice.action === 'skill-set') {
+        await state.update(key, (session) => ({ ...session, skill: choice.value }));
+        await acknowledgeChoice(ctx, '스킬을 선택했습니다.');
+        await finishChoiceMessage(
+          ctx,
+          `Agent skill: ${choice.value}\n다음 일반 요청부터 이 skill을 사용하도록 agy에 지시합니다.`,
+        );
+        interactiveMenus.delete(menu.token);
+        return;
+      }
+      if (choice.action === 'skill-clear') {
+        await state.update(key, (session) => ({ ...session, skill: null }));
+        await acknowledgeChoice(ctx, '스킬 선택을 해제했습니다.');
+        await finishChoiceMessage(ctx, 'Agent skill 선택을 해제했습니다.');
+        interactiveMenus.delete(menu.token);
+        return;
+      }
+      if (choice.action === 'noop') {
+        await acknowledgeChoice(ctx, '현재 페이지입니다.');
+        return;
+      }
       switch (menu.type) {
         case 'model':
           await state.update(key, (session) => ({ ...session, model: choice.value }));
@@ -1389,26 +1551,91 @@ async function main() {
     }
   });
 
+  bot.command('skills', async (ctx) => {
+    const requested = commandArgument(ctx);
+    if (!(await isIdle(ctx))) return;
+    const chatId = sessionKey(ctx);
+    const stopTyping = startTyping(ctx);
+    try {
+      await runAdmittedTask(ctx, 'probe:skills', async (signal) => {
+        if (auth.hasAnyActive()) throw new BusyError('Authentication is in progress');
+        if (normalizeChoice(requested) === 'clear') {
+          await state.update(chatId, (session) => ({ ...session, skill: null }));
+          await ctx.reply('Agent skill 선택을 해제했습니다.');
+          return;
+        }
+        await openSkillsMenu(ctx, { query: requested, signal });
+      });
+    } catch (error) {
+      await replyLong(ctx, formatError(error));
+    } finally {
+      stopTyping();
+    }
+  });
+
   bot.command('mode', async (ctx) => {
     await runControl(ctx, async () => {
       const requested = normalizeChoice(commandArgument(ctx));
       const aliases = { code: 'accept-edits', plan: 'plan', 'accept-edits': 'accept-edits' };
       if (!requested) {
-        const current = state.get(sessionKey(ctx)).mode;
+        const current = state.get(sessionKey(ctx));
         await openChoiceMenu(ctx, {
           type: 'mode',
           title: '실행 모드 선택',
-          current,
+          current: isYoloSession(current) ? 'YOLO' : current.mode,
           choices: modeChoices(current),
         });
         return;
       }
+      if (requested === 'yolo') {
+        const policyError = await enableYolo(sessionKey(ctx));
+        if (policyError) {
+          await ctx.reply(policyError);
+          return;
+        }
+        await ctx.reply('YOLO mode: 켜짐\naccept-edits + unsandboxed + --dangerously-skip-permissions');
+        return;
+      }
       if (!aliases[requested]) {
-        await ctx.reply('지원 모드는 plan, code(accept-edits)입니다.');
+        await ctx.reply('지원 모드는 plan, code(accept-edits), yolo입니다.');
         return;
       }
       await state.update(sessionKey(ctx), (session) => ({ ...session, mode: aliases[requested] }));
       await ctx.reply(`실행 모드: ${aliases[requested]}`);
+    });
+  });
+
+  bot.command('yolo', async (ctx) => {
+    await runControl(ctx, async () => {
+      const requested = normalizeChoice(commandArgument(ctx));
+      const key = sessionKey(ctx);
+      const session = state.get(key);
+      if (!requested) {
+        await openChoiceMenu(ctx, {
+          type: 'yolo',
+          title: 'YOLO mode',
+          current: yoloStatus(session),
+          choices: yoloChoices(session),
+          hint:
+            '켜면 다음 일반 요청부터 accept-edits + unsandboxed + --dangerously-skip-permissions로 실행합니다.',
+        });
+        return;
+      }
+      if (['on', 'true', '1', 'enable', 'enabled'].includes(requested)) {
+        const policyError = await enableYolo(key);
+        if (policyError) {
+          await ctx.reply(policyError);
+          return;
+        }
+        await ctx.reply('YOLO mode: 켜짐\naccept-edits + unsandboxed + --dangerously-skip-permissions');
+        return;
+      }
+      if (['off', 'false', '0', 'disable', 'disabled'].includes(requested)) {
+        await disableYolo(key);
+        await ctx.reply('YOLO mode: 꺼짐\nsandbox code 모드로 전환했습니다.');
+        return;
+      }
+      await ctx.reply('사용법: /yolo on 또는 /yolo off');
     });
   });
 
@@ -1532,6 +1759,7 @@ async function main() {
         `에이전트: ${session.agent || 'agy 기본값'}`,
         `모드: ${session.mode}`,
         `샌드박스: ${config.allowUnsandboxedRuns ? (session.sandbox ? '켜짐' : '꺼짐') : '강제 켜짐 (정책)'}`,
+        `YOLO: ${yoloStatus(session)}`,
         `작업 중: ${tasks.isActive(sessionKey(ctx)) ? '예' : '아니요'}`,
       ].join('\n'),
     );

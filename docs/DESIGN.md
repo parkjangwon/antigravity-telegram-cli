@@ -51,12 +51,27 @@ An administrator must opt in to any unsandboxed run with `ALLOW_UNSANDBOXED_RUNS
 `/plan` applies a one-shot `mode=plan` override. `/apply` requires that the immediately recorded last run was a successful plan and that a native conversation ID is present. It continues that conversation with a one-shot `mode=accept-edits` override and, by default, `sandbox=true`. Neither command permanently changes the stored mode/sandbox selection.
 
 Interactive Telegram menus are used for settings that naturally require a
-choice: `/model`, `/agent`, `/mode`, and `/sandbox`. The bot stores only a
-short-lived in-memory token in the callback payload instead of embedding model
-or agent names directly, which keeps callback data below Telegram's 64-byte
-limit. A menu is bound to the session key and the user who opened it, expires
-after ten minutes, and falls back to the original text-argument commands for
-operators who prefer typing or automation.
+choice: `/model`, `/agent`, `/skills`, `/mode`, `/sandbox`, and `/yolo`. The bot
+stores only a short-lived in-memory token in the callback payload instead of
+embedding long model, agent, or skill names directly, which keeps callback data
+below Telegram's 64-byte limit. A menu is bound to the session key and the user
+who opened it, expires after ten minutes, and falls back to text-argument
+commands where useful for operators who prefer typing or automation.
+
+Telegram's native slash-command menu is static and cannot show a user-specific,
+potentially huge skill catalog. The bot therefore exposes `/skills` in the
+native command menu, then renders the actual Antigravity skill catalog as a
+paginated inline keyboard with search (`/skills query`). Selecting a skill stores
+its name in the session and prepends a stable skill-use instruction to subsequent
+headless prompts. This is intentionally implemented as prompt steering because
+the current `agy` CLI exposes no documented headless `skills` subcommand.
+
+`/yolo` is not an upstream `--mode` value. It is a Telegram execution profile
+that sets the session to `mode=accept-edits` and `sandbox=false`. The actual
+permission bypass still requires both administrative opt-ins:
+`ALLOW_UNSANDBOXED_RUNS=true` and `ALLOW_UNSANDBOXED_AUTO_APPROVE=true`; only
+then does the execution layer pass `--dangerously-skip-permissions` without
+`--sandbox`.
 
 ## Session and state model
 

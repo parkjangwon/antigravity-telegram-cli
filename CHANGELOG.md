@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 — 2026-07-13
+
+- Add Telegram button-driven YOLO mode for explicitly enabled unsandboxed
+  auto-approve runs.
+- Add paginated Telegram skill selection with search, persisted per session and
+  applied to subsequent agy prompts.
+- Document the skill discovery paths, dynamic Telegram menu limitation, and
+  the two-step environment opt-in required for YOLO behavior.
+
 ## 0.3.1 — 2026-07-13
 
 - Add Telegram inline-button menus for `/model`, `/agent`, `/mode`, and

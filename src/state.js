@@ -9,6 +9,7 @@ const EXECUTION_FIELDS = [
   'projectId',
   'model',
   'agent',
+  'skill',
   'mode',
   'sandbox',
   'workspaceDir',
@@ -99,6 +100,7 @@ function normalizeSession(value, defaults) {
     projectId: typeof source.projectId === 'string' && source.projectId ? source.projectId : null,
     model: typeof source.model === 'string' && source.model ? source.model : null,
     agent: typeof source.agent === 'string' && source.agent ? source.agent : null,
+    skill: typeof source.skill === 'string' && source.skill ? source.skill.slice(0, 200) : null,
     mode: ['accept-edits', 'plan'].includes(source.mode) ? source.mode : defaults.mode,
     sandbox: typeof source.sandbox === 'boolean' ? source.sandbox : defaults.sandbox,
     workspaceDir:

@@ -30,7 +30,7 @@ Then open Telegram and send `/auth` to the bot. It will show the Antigravity OAu
 
 ## What You Get
 
-- Telegram control for `agy`: chat, plan/apply, button-based model/agent/mode switching, uploads, jobs, retries, and result recovery.
+- Telegram control for `agy`: chat, plan/apply, button-based model/agent/skill/mode switching, uploads, jobs, retries, and result recovery.
 - Headless OAuth designed for remote Linux servers and other no-IDE environments.
 - Managed per-user service: launchd on macOS, systemd user service on Linux, Task Scheduler on Windows.
 - Verified release installer/updater and data-preserving uninstaller.
@@ -56,7 +56,7 @@ Rerun the same install command any time to update or repair the managed installa
 | Plain text | Send a request to `agy` in the selected workspace. |
 | `/plan <request>` / `/apply [notes]` | Create a plan, then apply it in sandboxed code mode. |
 | `/new`, `/workspace`, `/project` | Start fresh or change project context. |
-| `/model`, `/agent`, `/mode`, `/sandbox` | Open Telegram buttons to inspect or change execution settings. Direct text arguments still work. |
+| `/model`, `/agent`, `/skills`, `/mode`, `/sandbox`, `/yolo` | Open Telegram buttons to inspect or change execution settings. `/skills query` searches long skill lists. |
 | `/status`, `/jobs`, `/last`, `/retry` | Inspect or recover work. |
 | `/auth` / `/cancel` | Authenticate or cancel the current request. |
 | `/update` / `/update apply` | Check and apply an official immutable release. |
@@ -68,7 +68,7 @@ Documents and photos are stored in an isolated upload directory for the single r
 
 - Use a dedicated low-privilege OS account and a narrow workspace. This is a trusted-operator tool, not a multi-tenant sandbox.
 - One OS user/keyring means one effective Antigravity account shared by every allowed chat on that bot instance.
-- Keep `ALLOW_UNSANDBOXED_RUNS=false` unless you deliberately accept unsandboxed agent execution.
+- Keep `ALLOW_UNSANDBOXED_RUNS=false` unless you deliberately accept unsandboxed agent execution. `/yolo` additionally requires `ALLOW_UNSANDBOXED_AUTO_APPROVE=true`.
 - Windows service installation requires a config/data ACL review before `WINDOWS_ACL_VERIFIED=true`; the wizard prepares the config but does not fake that attestation.
 
 Full installer options, rollback behavior, release verification, Windows ACL commands, and troubleshooting live in [Managed install, update, and uninstall](docs/MANAGED_INSTALL.md). Service paths and platform operations are in [Cross-platform operations](docs/CROSS_PLATFORM_OPERATIONS.md).
