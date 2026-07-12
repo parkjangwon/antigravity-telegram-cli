@@ -250,7 +250,7 @@ test('explicit root ignores changed XDG defaults and missing external state does
   const result = await uninstallManagedInstallation(
     { installRoot: context.installRoot },
     dependencies(context, {
-      platform: 'linux',
+      platform: process.platform === 'win32' ? 'win32' : 'linux',
       env: {
         HOME: context.homeDir,
         XDG_DATA_HOME: 'relative-data-is-ignored-for-explicit-root',

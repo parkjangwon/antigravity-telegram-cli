@@ -35,6 +35,8 @@ async function eventually(predicate, timeoutMs = 1_000) {
 }
 
 test('service runtime paths honor custom data directories on POSIX and Windows', () => {
+  const runtimeConfigOne = process.platform === 'win32' ? 'C:\\one.env' : '/one.env';
+  const runtimeConfigTwo = process.platform === 'win32' ? 'C:\\two.env' : '/two.env';
   assert.equal(
     resolveServiceDataDir({
       projectDir: '/srv/agygram',
@@ -92,9 +94,9 @@ test('service runtime paths honor custom data directories on POSIX and Windows',
   assert.throws(
     () => parseFileRunnerArguments([
       '--config-file',
-      '/one.env',
+      runtimeConfigOne,
       '--config-file',
-      '/two.env',
+      runtimeConfigTwo,
     ]),
     /Duplicate runtime option/,
   );
