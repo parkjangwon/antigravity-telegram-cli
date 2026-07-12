@@ -63,6 +63,7 @@ import {
 } from './telegram.js';
 import { prepareWorkspaces, resolveWorkspace } from './workspace.js';
 import { AGYGRAM_VERSION } from './version.js';
+import { applySourceUpdate, checkSourceUpdate } from './updater.js';
 
 const runtimeArguments = parseFileRunnerArguments(process.argv.slice(2));
 const pinnedServicePath = runtimeArguments.dataDir ? process.env.PATH : undefined;
@@ -108,6 +109,7 @@ const HELP_TEXT = `Antigravity Telegram CLI Bot
 /jobs — 최근 내구 작업 기록
 /retry <작업ID> — 실패·취소·중단된 작업 재시도
 /auth — agy headless OAuth 인증/재인증
+/update [apply] — 공식 immutable 릴리즈 확인 또는 소유자 업데이트
 /cancel — 현재 agy 또는 인증 작업 중단
 /reset — 현재 채팅의 설정·기록 초기화
 /help — 이 도움말
@@ -1341,6 +1343,32 @@ async function main() {
       ]);
       await ctx.reply('현재 채팅의 설정, 대화 기록, 업로드를 초기화했습니다. agy 인증 정보는 건드리지 않았습니다.');
     });
+  });
+
+  bot.command('update', async (ctx) => {
+    if (!config.ownerUserIds.has(String(ctx.from?.id)) || ctx.chat.type !== 'private') {
+      await ctx.reply('업데이트는 허용된 소유자의 개인 채팅에서만 실행할 수 있습니다.');
+      return;
+    }
+    if (!await isIdle(ctx)) return;
+    const apply = commandArgument(ctx).trim() === 'apply';
+    try {
+      const result = apply ? await applySourceUpdate(process.cwd()) : await checkSourceUpdate(process.cwd());
+      if (!apply) {
+        await ctx.reply(result.version === result.current
+          ? `최신 버전입니다. v${result.current}`
+          : `업데이트 가능: v${result.current} → v${result.version}\n적용: /update apply`);
+        return;
+      }
+      if (!result.changed) {
+        await ctx.reply(`이미 최신 버전입니다. v${result.current}`);
+        return;
+      }
+      await ctx.reply(`v${result.version}을 검증·설치했습니다. 서비스를 재시작합니다.`);
+      setTimeout(() => process.exit(75), 300).unref?.();
+    } catch (error) {
+      await ctx.reply(`업데이트하지 않았습니다: ${error.message}`);
+    }
   });
 
   bot.command('auth', async (ctx) => {
