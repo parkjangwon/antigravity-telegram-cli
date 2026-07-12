@@ -1059,7 +1059,21 @@ function runCommand(file, args, {
 }
 
 async function findNpmCli() {
+  // npm invokes child scripts with this absolute path. Accept it only when it
+  // resolves inside the active Node distribution; never trust an arbitrary
+  // environment-provided JavaScript path.
+  let npmExecPath = null;
+  if (process.env.npm_execpath && path.isAbsolute(process.env.npm_execpath)) {
+    try {
+      const nodeRoot = await realpath(path.resolve(path.dirname(process.execPath), '..'));
+      const resolved = await realpath(process.env.npm_execpath);
+      if (isStrictDescendant(nodeRoot, resolved)) npmExecPath = resolved;
+    } catch {
+      // Standard distribution locations below remain authoritative fallbacks.
+    }
+  }
   const candidates = [
+    npmExecPath,
     path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     path.resolve(path.dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     path.resolve(path.dirname(process.execPath), '..', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
