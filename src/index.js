@@ -64,6 +64,7 @@ import {
 import { prepareWorkspaces, resolveWorkspace } from './workspace.js';
 import { AGYGRAM_VERSION } from './version.js';
 import { applySourceUpdate, checkSourceUpdate } from './updater.js';
+import { synchronizeBotCommandMenu } from './command-menu.js';
 
 const runtimeArguments = parseFileRunnerArguments(process.argv.slice(2));
 const pinnedServicePath = runtimeArguments.dataDir ? process.env.PATH : undefined;
@@ -1569,37 +1570,10 @@ async function main() {
   const removeSignalHandlers = lifecycle.installSignalHandlers(process);
   try {
     await lifecycle.start({
-      setCommands: (startupSignal) =>
-        retryTelegramCall(
-          (attemptSignal) =>
-            bot.telegram.callApi(
-              'setMyCommands',
-              {
-                commands: [
-                  { command: 'plan', description: '수정 없이 구현 계획 생성' },
-                  { command: 'apply', description: '직전 계획을 sandbox에서 구현' },
-                  { command: 'new', description: '새 대화와 agy 프로젝트 시작' },
-                  { command: 'model', description: '모델 목록 조회 또는 전환' },
-                  { command: 'agent', description: '에이전트 목록 조회 또는 전환' },
-                  { command: 'mode', description: 'plan/code 모드 전환' },
-                  { command: 'sandbox', description: '샌드박스 조회 또는 설정' },
-                  { command: 'workspace', description: '작업공간 조회 또는 전환' },
-                  { command: 'project', description: 'agy 프로젝트 지정' },
-                  { command: 'info', description: '현재 세션 상태' },
-                  { command: 'status', description: '현재 작업 단계와 경과 시간' },
-                  { command: 'last', description: '마지막 agy 응답 다시 받기' },
-                  { command: 'jobs', description: '최근 내구 작업 기록' },
-                  { command: 'retry', description: '실패·취소·중단 작업 재시도' },
-                  { command: 'auth', description: 'agy 인증 또는 재인증' },
-                  { command: 'cancel', description: '현재 작업 중단' },
-                  { command: 'reset', description: '현재 채팅 상태 초기화' },
-                  { command: 'help', description: '명령어 도움말' },
-                ],
-              },
-              { signal: attemptSignal },
-            ),
-          { operation: 'set bot commands', signal: startupSignal },
-        ),
+      setCommands: (startupSignal) => synchronizeBotCommandMenu(bot, {
+        allowedChatIds: config.allowedChatIds,
+        signal: startupSignal,
+      }),
       launchOptions: { dropPendingUpdates: false },
       onLaunch: () => {
         console.log(`Antigravity Telegram bot started with agy at ${agyExecutable}`);
