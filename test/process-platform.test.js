@@ -247,6 +247,7 @@ test('spawn spec carries cwd and only the caller-supplied environment into a rea
       cwd: root,
       env: { SAFE_MARKER: 'present' },
     });
+    assert.equal(spec.options.cwd, root);
 
     const result = await new Promise((resolve, reject) => {
       const child = spawn(spec.command, spec.args, {
@@ -265,11 +266,10 @@ test('spawn spec carries cwd and only the caller-supplied environment into a rea
         : reject(new Error(`child exited ${code}: ${stderr}`)));
     });
 
-    assert.deepEqual(result, {
-      cwd: await realpath(root),
-      marker: 'present',
-      argument: hostile,
-    });
+    assert.equal(await realpath(result.cwd), await realpath(root));
+    assert.equal(result.marker, 'present');
+    assert.equal(result.argument, hostile);
+    assert.equal(result.parentSecret, undefined);
   } finally {
     delete process.env[parentSecretName];
     await rm(root, { recursive: true, force: true });
