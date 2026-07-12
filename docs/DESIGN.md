@@ -50,6 +50,14 @@ An administrator must opt in to any unsandboxed run with `ALLOW_UNSANDBOXED_RUNS
 
 `/plan` applies a one-shot `mode=plan` override. `/apply` requires that the immediately recorded last run was a successful plan and that a native conversation ID is present. It continues that conversation with a one-shot `mode=accept-edits` override and, by default, `sandbox=true`. Neither command permanently changes the stored mode/sandbox selection.
 
+Interactive Telegram menus are used for settings that naturally require a
+choice: `/model`, `/agent`, `/mode`, and `/sandbox`. The bot stores only a
+short-lived in-memory token in the callback payload instead of embedding model
+or agent names directly, which keeps callback data below Telegram's 64-byte
+limit. A menu is bound to the session key and the user who opened it, expires
+after ten minutes, and falls back to the original text-argument commands for
+operators who prefer typing or automation.
+
 ## Session and state model
 
 Normal chats use `chat_id` as the session key. Telegram forum topics use `chat_id:message_thread_id`; state, durable jobs, task activity, uploads, and outgoing thread routing use that topic key.

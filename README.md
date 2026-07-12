@@ -30,7 +30,7 @@ Then open Telegram and send `/auth` to the bot. It will show the Antigravity OAu
 
 ## What You Get
 
-- Telegram control for `agy`: chat, plan/apply, model/agent/mode switching, uploads, jobs, retries, and result recovery.
+- Telegram control for `agy`: chat, plan/apply, button-based model/agent/mode switching, uploads, jobs, retries, and result recovery.
 - Headless OAuth designed for remote Linux servers and other no-IDE environments.
 - Managed per-user service: launchd on macOS, systemd user service on Linux, Task Scheduler on Windows.
 - Verified release installer/updater and data-preserving uninstaller.
@@ -56,7 +56,7 @@ Rerun the same install command any time to update or repair the managed installa
 | Plain text | Send a request to `agy` in the selected workspace. |
 | `/plan <request>` / `/apply [notes]` | Create a plan, then apply it in sandboxed code mode. |
 | `/new`, `/workspace`, `/project` | Start fresh or change project context. |
-| `/model`, `/agent`, `/mode`, `/sandbox` | Inspect or change session execution settings. |
+| `/model`, `/agent`, `/mode`, `/sandbox` | Open Telegram buttons to inspect or change execution settings. Direct text arguments still work. |
 | `/status`, `/jobs`, `/last`, `/retry` | Inspect or recover work. |
 | `/auth` / `/cancel` | Authenticate or cancel the current request. |
 | `/update` / `/update apply` | Check and apply an official immutable release. |

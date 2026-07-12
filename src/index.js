@@ -45,6 +45,13 @@ import { appendHistory, StateStore } from './state.js';
 import { BusyError, KeyedMutex, TaskManager } from './tasks.js';
 import { runWithUsage, UsageLimitError, UsageStore } from './usage-store.js';
 import {
+  buildChoiceKeyboard,
+  createChoiceMenu,
+  currentMarker,
+  formatChoiceMenuText,
+  parseChoiceCallback,
+} from './interactive-ui.js';
+import {
   commandArgument,
   classifyUpdateAge,
   guardTelegramClient,
@@ -98,10 +105,10 @@ const HELP_TEXT = `agygram
 /new — 대화 기록을 비우고 다음 요청에서 새 agy 프로젝트 시작
 /plan <요청> — 수정 없이 계획 생성
 /apply [추가 지시] — 직전 계획을 sandbox code 모드로 실행
-/model [이름|default] — 모델 목록 조회 또는 전환
-/agent [이름|default] — 에이전트 목록 조회 또는 전환
-/mode [plan|code|accept-edits] — 실행 모드 전환
-/sandbox [on|off] — 샌드박스 조회 또는 명시적 설정
+/model [이름|default] — 모델 목록을 버튼으로 조회·전환
+/agent [이름|default] — 에이전트 목록을 버튼으로 조회·전환
+/mode [plan|code|accept-edits] — 실행 모드를 버튼으로 전환
+/sandbox [on|off] — 샌드박스를 버튼으로 조회·설정
 /workspace [경로] — 허용된 작업공간 조회 또는 전환
 /project [ID|clear] — 명시적 agy 프로젝트 지정
 /info — 현재 세션 상태
@@ -541,6 +548,89 @@ async function main() {
     }
   };
 
+  const interactiveMenus = new Map();
+  const cleanupInteractiveMenus = () => {
+    const now = Date.now();
+    for (const [token, menu] of interactiveMenus) {
+      if (menu.expiresAt <= now) interactiveMenus.delete(token);
+    }
+  };
+  const openChoiceMenu = async (ctx, {
+    type,
+    title,
+    current,
+    choices,
+    hint,
+    columns = 1,
+  }) => {
+    cleanupInteractiveMenus();
+    const menu = createChoiceMenu({
+      sessionKey: sessionKey(ctx),
+      actorUserId: ctx.from?.id,
+      type,
+      choices,
+    });
+    interactiveMenus.set(menu.token, menu);
+    await ctx.reply(formatChoiceMenuText({ title, current, hint }), {
+      reply_markup: buildChoiceKeyboard(menu.token, menu.choices, { columns }),
+    });
+  };
+  const acknowledgeChoice = async (ctx, text, { alert = false } = {}) => {
+    const message = String(text || '').length > 180
+      ? `${String(text).slice(0, 179)}…`
+      : String(text || '');
+    await ctx.answerCbQuery(message, { show_alert: alert }).catch(() => {});
+  };
+  const runChoiceControl = async (ctx, operation) => {
+    if (auth.hasAnyActive()) {
+      await jobs.markUpdateSeen(ctx.update?.update_id, { decision: 'rejected' });
+      await acknowledgeChoice(ctx, '인증 작업 중에는 설정을 바꿀 수 없습니다.', { alert: true });
+      return;
+    }
+    try {
+      await runAdmittedTask(ctx, 'control:button', async () => operation());
+    } catch (error) {
+      await jobs.markUpdateSeen(ctx.update?.update_id, { decision: 'rejected' });
+      await acknowledgeChoice(ctx, formatError(error), { alert: true });
+    }
+  };
+  const finishChoiceMessage = async (ctx, text) => {
+    await ctx.editMessageText(text).catch(() => ctx.reply(text));
+  };
+  const modeChoices = (current) => [
+    {
+      label: `${currentMarker('plan', current)}Plan · 수정 없이 계획`,
+      value: 'plan',
+    },
+    {
+      label: `${currentMarker('accept-edits', current)}Code · 파일 수정 허용`,
+      value: 'accept-edits',
+    },
+    { label: '닫기', action: 'cancel' },
+  ];
+  const sandboxChoices = (current) => [
+    {
+      label: `${currentMarker(true, current)}켜짐 · 안전 기본값`,
+      value: true,
+    },
+    {
+      label: `${currentMarker(false, current)}꺼짐 · 신뢰 실행`,
+      value: false,
+    },
+    { label: '닫기', action: 'cancel' },
+  ];
+  const defaultableChoices = ({ current, defaultLabel, values }) => [
+    {
+      label: `${current == null ? '✓ ' : ''}${defaultLabel}`,
+      value: null,
+    },
+    ...values.map((value) => ({
+      label: `${currentMarker(value, current)}${value}`,
+      value,
+    })),
+    { label: '닫기', action: 'cancel' },
+  ];
+
   const runAgyRequest = async (ctx, prepareRequest, journalJob = null) => {
     const chatId = sessionKey(ctx);
     const releaseJournalLease = journalJob ? jobs.acquireLease(journalJob.id) : null;
@@ -883,6 +973,79 @@ async function main() {
 
   bot.help((ctx) => ctx.reply(HELP_TEXT));
 
+  bot.action(/^ui:/, async (ctx) => {
+    const parsed = parseChoiceCallback(ctx.callbackQuery?.data);
+    if (!parsed) {
+      await acknowledgeChoice(ctx, '알 수 없는 버튼입니다.', { alert: true });
+      return;
+    }
+    cleanupInteractiveMenus();
+    const menu = interactiveMenus.get(parsed.token);
+    if (!menu) {
+      await acknowledgeChoice(ctx, '만료된 메뉴입니다. 명령을 다시 실행하세요.', { alert: true });
+      return;
+    }
+    if (menu.sessionKey !== sessionKey(ctx)) {
+      await acknowledgeChoice(ctx, '다른 채팅/토픽의 메뉴입니다.', { alert: true });
+      return;
+    }
+    if (menu.actorUserId && menu.actorUserId !== String(ctx.from?.id ?? '')) {
+      await acknowledgeChoice(ctx, '이 메뉴를 연 사용자만 선택할 수 있습니다.', { alert: true });
+      return;
+    }
+    const choice = menu.choices[parsed.index];
+    if (!choice) {
+      await acknowledgeChoice(ctx, '선택지를 찾을 수 없습니다.', { alert: true });
+      return;
+    }
+    if (choice.action === 'cancel') {
+      interactiveMenus.delete(menu.token);
+      await acknowledgeChoice(ctx, '닫았습니다.');
+      await finishChoiceMessage(ctx, '선택을 취소했습니다.');
+      return;
+    }
+    await runChoiceControl(ctx, async () => {
+      const key = sessionKey(ctx);
+      switch (menu.type) {
+        case 'model':
+          await state.update(key, (session) => ({ ...session, model: choice.value }));
+          await acknowledgeChoice(ctx, '모델을 변경했습니다.');
+          await finishChoiceMessage(ctx, `모델: ${choice.value || 'agy 기본값'}`);
+          interactiveMenus.delete(menu.token);
+          return;
+        case 'agent':
+          await state.update(key, (session) => ({ ...session, agent: choice.value }));
+          await acknowledgeChoice(ctx, '에이전트를 변경했습니다.');
+          await finishChoiceMessage(ctx, `에이전트: ${choice.value || 'agy 기본값'}`);
+          interactiveMenus.delete(menu.token);
+          return;
+        case 'mode':
+          await state.update(key, (session) => ({ ...session, mode: choice.value }));
+          await acknowledgeChoice(ctx, '실행 모드를 변경했습니다.');
+          await finishChoiceMessage(ctx, `실행 모드: ${choice.value}`);
+          interactiveMenus.delete(menu.token);
+          return;
+        case 'sandbox':
+          if (choice.value === false && !config.allowUnsandboxedRuns) {
+            await acknowledgeChoice(ctx, '운영 정책상 샌드박스를 끌 수 없습니다.', { alert: true });
+            return;
+          }
+          await state.update(key, (session) => ({ ...session, sandbox: choice.value }));
+          await acknowledgeChoice(ctx, '샌드박스 설정을 변경했습니다.');
+          await finishChoiceMessage(
+            ctx,
+            choice.value
+              ? '샌드박스: 켜짐 (--sandbox와 내부 자동 승인을 함께 사용)'
+              : '샌드박스: 꺼짐 (대화형 권한 요청이 필요한 도구는 headless에서 실패할 수 있음)',
+          );
+          interactiveMenus.delete(menu.token);
+          return;
+        default:
+          await acknowledgeChoice(ctx, '지원하지 않는 메뉴입니다.', { alert: true });
+      }
+    });
+  });
+
   bot.command('status', async (ctx) => {
     const key = sessionKey(ctx);
     const active = tasks.getStatus(key);
@@ -1151,7 +1314,17 @@ async function main() {
         }
         const models = await agy.models({ cwd, signal });
         if (!requested) {
-          await replyLong(ctx, `현재: ${session.model || 'agy 기본값'}\n\n사용 가능한 모델:\n${models.join('\n')}`);
+          await openChoiceMenu(ctx, {
+            type: 'model',
+            title: '모델 선택',
+            current: session.model || 'agy 기본값',
+            choices: defaultableChoices({
+              current: session.model,
+              defaultLabel: 'agy 기본값',
+              values: models,
+            }),
+            hint: '원하는 모델을 누르세요. 모델명이 길면 /model <이름> 직접 입력도 가능합니다.',
+          });
           return;
         }
         const selected = models.find((model) => normalizeChoice(model) === normalizeChoice(requested));
@@ -1186,7 +1359,19 @@ async function main() {
         }
         const agents = await agy.agents({ cwd, signal });
         if (!requested) {
-          await replyLong(ctx, `현재: ${session.agent || 'agy 기본값'}\n\n사용 가능한 에이전트:\n${agents.join('\n') || '(없음)'}`);
+          await openChoiceMenu(ctx, {
+            type: 'agent',
+            title: '에이전트 선택',
+            current: session.agent || 'agy 기본값',
+            choices: defaultableChoices({
+              current: session.agent,
+              defaultLabel: 'agy 기본값',
+              values: agents,
+            }),
+            hint: agents.length > 0
+              ? '원하는 에이전트를 누르세요. 에이전트명이 길면 /agent <이름> 직접 입력도 가능합니다.'
+              : 'agy가 노출한 추가 에이전트가 없습니다. 기본값만 선택할 수 있습니다.',
+          });
           return;
         }
         const selected = agents.find((agent) => normalizeChoice(agent) === normalizeChoice(requested));
@@ -1209,7 +1394,13 @@ async function main() {
       const requested = normalizeChoice(commandArgument(ctx));
       const aliases = { code: 'accept-edits', plan: 'plan', 'accept-edits': 'accept-edits' };
       if (!requested) {
-        await ctx.reply(`현재 모드: ${state.get(sessionKey(ctx)).mode}\n사용법: /mode plan 또는 /mode code`);
+        const current = state.get(sessionKey(ctx)).mode;
+        await openChoiceMenu(ctx, {
+          type: 'mode',
+          title: '실행 모드 선택',
+          current,
+          choices: modeChoices(current),
+        });
         return;
       }
       if (!aliases[requested]) {
@@ -1227,7 +1418,17 @@ async function main() {
       const current = state.get(sessionKey(ctx)).sandbox;
       let enabled;
       if (!requested) {
-        await ctx.reply(`현재 샌드박스: ${current ? '켜짐' : '꺼짐'}\n변경: /sandbox on 또는 /sandbox off`);
+        await openChoiceMenu(ctx, {
+          type: 'sandbox',
+          title: '샌드박스 설정',
+          current: config.allowUnsandboxedRuns
+            ? (current ? '켜짐' : '꺼짐')
+            : '강제 켜짐 (정책)',
+          choices: sandboxChoices(config.allowUnsandboxedRuns ? current : true),
+          hint: config.allowUnsandboxedRuns
+            ? '실행 격리 정책을 선택하세요.'
+            : '현재 운영 정책상 꺼짐은 선택할 수 없습니다.',
+        });
         return;
       }
       else if (['on', 'true', '1'].includes(requested)) enabled = true;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 — 2026-07-13
+
+- Add Telegram inline-button menus for `/model`, `/agent`, `/mode`, and
+  `/sandbox` while preserving direct text arguments for automation.
+- Bind interactive menus to the opening user and chat/topic, expire them after
+  ten minutes, and keep callback payloads tokenized so long model or agent
+  names do not exceed Telegram limits.
+
 ## 0.3.0 — 2026-07-12
 
 - Rename the public project identity to `agygram`, including repository URLs,

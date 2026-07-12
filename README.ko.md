@@ -30,7 +30,7 @@ Windows PowerShell:
 
 ## 제공 기능
 
-- Telegram에서 `agy` 제어: 대화, plan/apply, model/agent/mode 전환, 업로드, 작업 기록, 재시도, 결과 복구
+- Telegram에서 `agy` 제어: 대화, plan/apply, 버튼 기반 model/agent/mode 전환, 업로드, 작업 기록, 재시도, 결과 복구
 - 원격 Linux 서버 같은 no-IDE 환경을 위한 headless OAuth
 - 사용자 단위 native service: macOS launchd, Linux systemd user service, Windows Task Scheduler
 - 검증된 릴리즈 설치/업데이트와 data 보존 언인스톨
@@ -56,7 +56,7 @@ agygram setup
 | 일반 메시지 | 선택된 workspace에서 `agy` 요청 실행 |
 | `/plan <요청>` / `/apply [추가 지시]` | 계획 생성 후 sandbox code 모드로 적용 |
 | `/new`, `/workspace`, `/project` | 새 대화 또는 프로젝트 문맥 전환 |
-| `/model`, `/agent`, `/mode`, `/sandbox` | 세션 실행 설정 조회/변경 |
+| `/model`, `/agent`, `/mode`, `/sandbox` | Telegram 버튼으로 실행 설정 조회/변경. 직접 인자 입력도 계속 지원 |
 | `/status`, `/jobs`, `/last`, `/retry` | 작업 상태 확인/복구 |
 | `/auth` / `/cancel` | 인증 또는 현재 요청 취소 |
 | `/update` / `/update apply` | 공식 immutable 릴리즈 확인/적용 |
