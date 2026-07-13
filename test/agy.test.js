@@ -767,7 +767,7 @@ test('catalog probe fails closed when agy is unavailable', async () => {
   assert.equal(catalog.reason, 'AGY_NOT_FOUND');
 });
 
-test('authenticationStatus verifies an already authenticated headless run', async () => {
+test('authenticationStatus verifies an already authenticated headless run', { skip: process.platform === 'win32' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agy-auth-ok-'));
   const shim = path.join(root, process.platform === 'win32' ? 'fake-agy.cmd' : 'fake-agy');
   try {
@@ -787,7 +787,7 @@ test('authenticationStatus verifies an already authenticated headless run', asyn
   }
 });
 
-test('authenticationStatus reports authentication-required output without throwing', async () => {
+test('authenticationStatus reports authentication-required output without throwing', { skip: process.platform === 'win32' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agy-auth-needed-'));
   const shim = path.join(root, process.platform === 'win32' ? 'fake-agy.cmd' : 'fake-agy');
   try {

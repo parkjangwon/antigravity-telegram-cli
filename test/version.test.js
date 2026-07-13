@@ -17,7 +17,7 @@ test('package, shrinkwrap, runtime, and CLI expose one release version', async (
     execFileAsync(process.execPath, [path.join(root, 'bin', 'agygram.js'), '--version']),
   ]);
 
-  assert.equal(AGYGRAM_VERSION, '0.3.6');
+  assert.equal(AGYGRAM_VERSION, '0.3.7');
   assert.equal(packageJson.version, AGYGRAM_VERSION);
   assert.equal(shrinkwrap.version, AGYGRAM_VERSION);
   assert.equal(shrinkwrap.packages[''].version, AGYGRAM_VERSION);

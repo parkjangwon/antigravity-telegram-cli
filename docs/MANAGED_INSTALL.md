@@ -2,7 +2,7 @@
 
 The release installer is the recommended way to run `agygram` as a current-user service. It keeps immutable application releases separate from configuration, runtime data, and the workspace. The same command performs a first install, an update, or reconciliation of managed state such as launchers, configuration, and the native service. It verifies an existing immutable release but does not rewrite damaged live code in place.
 
-The current public bootstrap is pinned to **0.3.6**. `install.sh` and `install.ps1` embedded in that release select the stable `v0.3.6` release, resolve its exact Git commit, and verify the downloaded installer and package before running them. A future release updates the version embedded in its own bootstrap; `releases/latest/download/...` then serves that new, independently pinned bootstrap.
+The current public bootstrap is pinned to **0.3.7**. `install.sh` and `install.ps1` embedded in that release select the stable `v0.3.7` release, resolve its exact Git commit, and verify the downloaded installer and package before running them. A future release updates the version embedded in its own bootstrap; `releases/latest/download/...` then serves that new, independently pinned bootstrap.
 
 ## Prerequisites
 
@@ -114,7 +114,7 @@ agygram doctor
 agygram service status
 ```
 
-For this release, `agygram --version` must print `0.3.6`. Telegram `/info` also includes the running `agygram` version. The installer prints its resolved `Current` and `Target` version/commit identities.
+For this release, `agygram --version` must print `0.3.7`. Telegram `/info` also includes the running `agygram` version. The installer prints its resolved `Current` and `Target` version/commit identities.
 
 ## Installer options
 
@@ -193,7 +193,7 @@ For independent verification, download the assets from the [GitHub release](http
 
 ```sh
 gh attestation verify ./install.sh --repo parkjangwon/agygram
-gh attestation verify ./agygram-0.3.6.tgz --repo parkjangwon/agygram
+gh attestation verify ./agygram-0.3.7.tgz --repo parkjangwon/agygram
 ```
 
 Attestation verification requires a current authenticated GitHub CLI. A checksum detects mismatch against the downloaded checksum list; a verified GitHub attestation additionally binds an asset to this repository's release workflow.

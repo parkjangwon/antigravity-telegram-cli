@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7 — 2026-07-13
+
+- Keep the new `/auth` preflight tests aligned with Windows executable policy;
+  the project intentionally rejects `.cmd` shims as agy binaries.
+
 ## 0.3.6 — 2026-07-13
 
 - Make `/auth` run a short real headless authentication probe first and return
