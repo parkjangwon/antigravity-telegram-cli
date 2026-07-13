@@ -1223,6 +1223,41 @@ export class AgyClient {
     }
   }
 
+  async authenticationStatus({ cwd, signal } = {}) {
+    const prompt = 'Reply with exactly AGY_AUTH_OK. Do not use tools or modify files.';
+    try {
+      const result = await runProcess(this.bin, [
+        '--mode',
+        'plan',
+        '--print-timeout',
+        '10s',
+        '--print',
+        prompt,
+      ], {
+        cwd,
+        timeoutMs: Math.min(this.authCheckTimeoutMs, 15_000),
+        maxOutputBytes: Math.min(this.maxOutputBytes, 256 * 1024),
+        signal,
+        env: this.environment,
+      });
+      const text = cleanResponse(`${result.stdout}\n${result.stderr}`);
+      return {
+        authenticated: /\bAGY_AUTH_OK\b/.test(text),
+        reason: null,
+        detail: text.slice(-1_000),
+      };
+    } catch (error) {
+      if (error instanceof AgyError) {
+        return {
+          authenticated: false,
+          reason: error.code,
+          detail: (error.stderr || error.stdout || error.message).trim().slice(-1_000),
+        };
+      }
+      throw error;
+    }
+  }
+
 }
 
 export const _private = {

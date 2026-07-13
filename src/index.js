@@ -1080,6 +1080,30 @@ async function main() {
       return;
     }
     const cwd = defaultWorkspace;
+    const stopTyping = startTyping(ctx);
+    try {
+      const status = await runAdmittedTask(ctx, 'probe:auth', (signal) =>
+        agy.authenticationStatus({ cwd, signal }));
+      if (status?.authenticated) {
+        await sendPanel(
+          ctx,
+          '✅ agy 인증이 이미 완료되어 있습니다.\n\n바로 일반 메시지를 보내면 현재 작업공간에서 agy가 처리합니다.',
+          [
+            [
+              { label: 'ℹ️ 세션', action: 'info' },
+              { label: '⚙️ 모드', action: 'mode' },
+            ],
+            [{ label: '🏠 메뉴', action: 'menu' }],
+          ],
+        );
+        return;
+      }
+    } catch (error) {
+      await replyLong(ctx, `인증 상태 확인에 실패했습니다.\n\n${formatError(error)}`);
+      return;
+    } finally {
+      stopTyping();
+    }
     try {
       authOwners.set(chatId, String(ctx.from.id));
       auth.start(chatId, {
@@ -1122,9 +1146,9 @@ async function main() {
     try {
         await replyLong(
           ctx,
-        'agy headless OAuth를 시작했습니다.\n\n' +
-          '잠시 후 인증 URL만 따로 보내드립니다. 브라우저에서 인증한 뒤 표시되는 authorization code를 이 채팅에 그대로 보내세요.\n\n' +
-          '테마·약관·워크스페이스 신뢰 설정은 안전한 기본값으로 자동 처리하고, 마지막에 실제 headless 요청으로 인증을 검증합니다. 중단: /cancel',
+        '🔐 agy 인증 확인을 시작했어요.\n\n' +
+          '로그인이 필요하면 Google 인증 링크를 보내드릴게요. 링크에서 받은 authorization code는 이 채팅에 그대로 붙여넣으면 됩니다.\n\n' +
+          '이미 로그인되어 있으면 바로 완료 메시지가 나옵니다. 취소: /cancel',
         );
     } catch (error) {
       console.error('Auth start notification failed', { name: error.name, code: error.code });

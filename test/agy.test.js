@@ -766,3 +766,43 @@ test('catalog probe fails closed when agy is unavailable', async () => {
   assert.equal(catalog.available, false);
   assert.equal(catalog.reason, 'AGY_NOT_FOUND');
 });
+
+test('authenticationStatus verifies an already authenticated headless run', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-auth-ok-'));
+  const shim = path.join(root, process.platform === 'win32' ? 'fake-agy.cmd' : 'fake-agy');
+  try {
+    await writeFile(
+      shim,
+      process.platform === 'win32'
+        ? '@echo off\r\necho AGY_AUTH_OK\r\n'
+        : '#!/bin/sh\necho AGY_AUTH_OK\n',
+    );
+    if (process.platform !== 'win32') await chmod(shim, 0o755);
+    const client = new AgyClient({ bin: shim, authCheckTimeoutMs: 1_000 });
+    const status = await client.authenticationStatus({ cwd: root });
+    assert.equal(status.authenticated, true);
+    assert.equal(status.reason, null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('authenticationStatus reports authentication-required output without throwing', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-auth-needed-'));
+  const shim = path.join(root, process.platform === 'win32' ? 'fake-agy.cmd' : 'fake-agy');
+  try {
+    await writeFile(
+      shim,
+      process.platform === 'win32'
+        ? '@echo off\r\necho Authentication required. Please visit the URL to log in: 1>&2\r\nexit /b 1\r\n'
+        : '#!/bin/sh\necho "Authentication required. Please visit the URL to log in:" >&2\nexit 1\n',
+    );
+    if (process.platform !== 'win32') await chmod(shim, 0o755);
+    const client = new AgyClient({ bin: shim, authCheckTimeoutMs: 1_000 });
+    const status = await client.authenticationStatus({ cwd: root });
+    assert.equal(status.authenticated, false);
+    assert.equal(status.reason, 'AGY_AUTH_REQUIRED');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

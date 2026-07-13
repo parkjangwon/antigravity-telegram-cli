@@ -1,6 +1,6 @@
 {
   "name": "agygram",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Headless, cross-platform Telegram controller for Google Antigravity CLI",
   "license": "MIT",
   "repository": {

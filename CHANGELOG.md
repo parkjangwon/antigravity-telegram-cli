@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.6 — 2026-07-13
+
+- Make `/auth` run a short real headless authentication probe first and return
+  immediately when `agy` is already signed in, instead of opening the OAuth TUI
+  and waiting for a URL that is not needed.
+- Keep the OAuth start message accurate for both already-authenticated and
+  login-required sessions.
+
 ## 0.3.5 — 2026-07-13
 
 - Make Telegram OAuth output action-focused: show only the auth URL, code
