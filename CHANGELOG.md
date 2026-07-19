@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.14 — 2026-07-19
+
+- Add inline buttons for confirmation and retry on failed, cancelled, or interrupted jobs.
+- Throttle chunked Telegram message delivery to prevent HTTP 429 flood errors.
+- Check file sizes and send a warning with the local path before sending files exceeding Telegram's 50MB limit.
+- Notify chats on bot startup about successfully recovered or interrupted tasks from a server restart, with direct retry options.
+
 ## 0.3.13 — 2026-07-13
 
 - Add Telegram `/doctor` with install, Node.js, workspace, `agy`, auth, and
