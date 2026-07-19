@@ -62,6 +62,21 @@ test('TaskManager bounds how long a queued job may wait', async () => {
   await first;
 });
 
+test('TaskManager uses a shorter queue timeout under backlog pressure', async () => {
+  const manager = new TaskManager(1, {
+    maxQueueWaitMs: 500,
+    overloadThreshold: 0.5,
+    overloadQueueWaitMs: 25,
+    maxActive: 4,
+  });
+  let releaseFirst;
+  const first = manager.run('1', () => new Promise((resolve) => (releaseFirst = resolve)));
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(manager.run('2', async () => {}), QueueTimeoutError);
+  releaseFirst();
+  await first;
+});
+
 test('TaskManager queue deadline includes same-workspace mutex wait but not agy execution', async () => {
   const manager = new TaskManager(2, { maxQueueWaitMs: 25 });
   const mutex = new KeyedMutex();

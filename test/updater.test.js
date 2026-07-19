@@ -101,3 +101,31 @@ test('source update accepts common official GitHub remote spellings', () => {
     'https://github.com/parkjangwon/agygram.git',
   );
 });
+
+test('latest release lookup maps transient failures to retryable update-check errors', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 429 });
+  try {
+    await assert.rejects(
+      _private.latestRelease(),
+      (error) => error?.code === 'UPDATE_CHECK_UNAVAILABLE',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('latest release lookup maps transport failures to retryable update-check errors', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error('network down');
+  };
+  try {
+    await assert.rejects(
+      _private.latestRelease(),
+      (error) => error?.code === 'UPDATE_CHECK_UNAVAILABLE',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -27,6 +27,19 @@ function parseInteger(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER 
   return parsed;
 }
 
+function parseVersionTriplet(value, name, fallback) {
+  const normalized = String(value ?? fallback).trim();
+  const match = normalized.match(/^v?(\d+)\.(\d+)\.(\d+)$/u);
+  if (!match) {
+    throw new Error(`${name} must be a semantic version triplet like 1.1.1`);
+  }
+  const numbers = match.slice(1).map((part) => Number(part));
+  if (!numbers.every(Number.isSafeInteger)) {
+    throw new Error(`${name} must be a semantic version triplet like 1.1.1`);
+  }
+  return `${numbers[0]}.${numbers[1]}.${numbers[2]}`;
+}
+
 function parseIdSet(value, name, { required = false } = {}) {
   const values = String(value ?? '')
     .split(',')
@@ -308,6 +321,8 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
     min: 10_000,
     max: 3_600_000,
   });
+  const agyMinVersion = parseVersionTriplet(env.AGY_MIN_VERSION, 'AGY_MIN_VERSION', '1.1.1');
+  const enforceAgyMinVersion = parseBoolean(env.AGY_ENFORCE_MIN_VERSION, false);
   const usageWindowMinutes = parseInteger(env.USAGE_WINDOW_MINUTES, 60, {
     min: 1,
     max: 24 * 60,
@@ -360,6 +375,22 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
     min: 30,
     max: 86_400,
   });
+  const agyQueueTimeoutMs = parseInteger(env.AGY_QUEUE_TIMEOUT_MS, 600_000, {
+    min: 10_000,
+    max: 3_600_000,
+  });
+  const agyQueueOverloadThresholdPercent = parseInteger(
+    env.AGY_QUEUE_OVERLOAD_THRESHOLD_PERCENT,
+    75,
+    { min: 10, max: 100 },
+  );
+  const agyQueueOverloadTimeoutMs = parseInteger(env.AGY_QUEUE_OVERLOAD_TIMEOUT_MS, 120_000, {
+    min: 10_000,
+    max: 3_600_000,
+  });
+  if (agyQueueOverloadTimeoutMs > agyQueueTimeoutMs) {
+    throw new Error('AGY_QUEUE_OVERLOAD_TIMEOUT_MS must not exceed AGY_QUEUE_TIMEOUT_MS');
+  }
   const maxPendingAgyJobs = parseInteger(env.MAX_PENDING_AGY_JOBS, 16, {
     min: 1,
     max: 256,
@@ -483,6 +514,8 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
     workspaceDir,
     allowedWorkspaceRoots: [workspaceDir, ...configuredRoots],
     agyTimeoutMs,
+    agyMinVersion,
+    enforceAgyMinVersion,
     authCheckTimeoutMs: parseInteger(env.AGY_AUTH_CHECK_TIMEOUT_MS, 30_000, {
       min: 2_000,
       max: 300_000,
@@ -506,10 +539,9 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
     historyMaxChars: parseInteger(env.HISTORY_MAX_CHARS, 24_000, { min: 0, max: 24_000 }),
     maxConcurrentAgy: parseInteger(env.MAX_CONCURRENT_AGY, 1, { min: 1, max: 16 }),
     maxUpdateAgeSeconds,
-    agyQueueTimeoutMs: parseInteger(env.AGY_QUEUE_TIMEOUT_MS, 600_000, {
-      min: 10_000,
-      max: 3_600_000,
-    }),
+    agyQueueTimeoutMs,
+    agyQueueOverloadThresholdPercent,
+    agyQueueOverloadTimeoutMs,
     maxPendingAgyJobs,
     maxPendingAgyJobsPerUser: parseInteger(env.MAX_PENDING_AGY_JOBS_PER_USER, 3, {
       min: 1,

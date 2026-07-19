@@ -945,6 +945,55 @@ function cleanResponse(output) {
   return String(output ?? '').trim();
 }
 
+function parseSemverTriplet(value) {
+  const normalized = String(value ?? '').trim();
+  const match = normalized.match(/^v?(\d+)\.(\d+)\.(\d+)$/u);
+  if (!match) return null;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (![major, minor, patch].every(Number.isSafeInteger)) return null;
+  return { major, minor, patch, normalized: `${major}.${minor}.${patch}` };
+}
+
+function extractSemverTriplet(value) {
+  const text = String(value ?? '');
+  const match = text.match(/(?:^|[^0-9])v?(\d+)\.(\d+)\.(\d+)(?:[^0-9]|$)/u);
+  if (!match) return null;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (![major, minor, patch].every(Number.isSafeInteger)) return null;
+  return { major, minor, patch, normalized: `${major}.${minor}.${patch}` };
+}
+
+function compareSemverTriplets(left, right) {
+  if (left.major !== right.major) return left.major - right.major;
+  if (left.minor !== right.minor) return left.minor - right.minor;
+  return left.patch - right.patch;
+}
+
+export function assertMinAgyVersion(versionOutput, minVersion) {
+  const minimum = parseSemverTriplet(minVersion);
+  if (!minimum) {
+    throw new TypeError('minVersion must be a semantic version triplet like "1.1.1"');
+  }
+  const detected = extractSemverTriplet(versionOutput);
+  if (!detected) {
+    return { minimum: minimum.normalized, detected: null, comparable: false };
+  }
+  if (compareSemverTriplets(detected, minimum) < 0) {
+    throw new AgyError(
+      `agy ${detected.normalized} is unsupported; require >= ${minimum.normalized}`,
+      {
+        code: 'AGY_VERSION_UNSUPPORTED',
+        stdout: String(versionOutput ?? ''),
+      },
+    );
+  }
+  return { minimum: minimum.normalized, detected: detected.normalized, comparable: true };
+}
+
 export function parseListOutput(output) {
   return String(output ?? '')
     .split(/\r?\n/)
@@ -1207,6 +1256,39 @@ export class AgyClient {
     return result.stdout.trim() || result.stderr.trim();
   }
 
+  async assertCompatibleVersion({
+    cwd,
+    signal,
+    minVersion,
+    enforce = true,
+  } = {}) {
+    const version = await this.version({ cwd, signal });
+    try {
+      const parsed = assertMinAgyVersion(version, minVersion);
+      if (!parsed.comparable) {
+        return {
+          ok: null,
+          minimum: parsed.minimum,
+          detected: null,
+          raw: version,
+          reason: 'AGY_VERSION_UNPARSEABLE',
+        };
+      }
+      return { ok: true, ...parsed, raw: version };
+    } catch (error) {
+      if (!enforce && error instanceof AgyError && error.code === 'AGY_VERSION_UNSUPPORTED') {
+        return {
+          ok: false,
+          minimum: String(minVersion ?? ''),
+          detected: null,
+          raw: version,
+          reason: error.message,
+        };
+      }
+      throw error;
+    }
+  }
+
   async catalogStatus({ cwd, signal } = {}) {
     try {
       const models = await this.models({ cwd, signal });
@@ -1262,8 +1344,11 @@ export class AgyClient {
 
 export const _private = {
   AUTH_PATTERN,
+  compareSemverTriplets,
   cleanResponse,
+  extractSemverTriplet,
   findIdInObject,
+  parseSemverTriplet,
   quoteWindowsArgument,
   readBoundedRunLog,
   readRunMetadata,

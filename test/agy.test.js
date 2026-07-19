@@ -10,6 +10,7 @@ import {
   _private,
   AgyClient,
   AgyError,
+  assertMinAgyVersion,
   assertArgvSupported,
   buildPromptWithHistory,
   cleanupAgyRunLogs,
@@ -40,6 +41,32 @@ test('parseConversationId supports metadata, resume hints, and JSON', () => {
   assert.equal(parseConversationId('Resume: agy --conversation deadbeef-1234'), 'deadbeef-1234');
   assert.equal(parseConversationId('{"metadata":{"conversationId":"json-id-1234"}}'), 'json-id-1234');
   assert.equal(parseConversationId('ordinary response without metadata'), null);
+});
+
+test('assertMinAgyVersion accepts compatible outputs and rejects old versions', () => {
+  assert.deepEqual(
+    assertMinAgyVersion('agy 1.2.3', '1.1.1'),
+    { minimum: '1.1.1', detected: '1.2.3', comparable: true },
+  );
+  assert.deepEqual(
+    assertMinAgyVersion('agy version unknown', '1.1.1'),
+    { minimum: '1.1.1', detected: null, comparable: false },
+  );
+  assert.throws(
+    () => assertMinAgyVersion('agy 1.0.9', '1.1.1'),
+    (error) => error instanceof AgyError && error.code === 'AGY_VERSION_UNSUPPORTED',
+  );
+});
+
+test('AgyClient compatibility check can warn instead of failing when enforcement is disabled', async () => {
+  const client = new AgyClient();
+  client.version = async () => 'agy 1.0.0';
+  const compatibility = await client.assertCompatibleVersion({
+    minVersion: '1.1.1',
+    enforce: false,
+  });
+  assert.equal(compatibility.ok, false);
+  assert.match(compatibility.reason, /unsupported/i);
 });
 
 test('parseRunMetadata recovers native IDs from an agy run log', () => {

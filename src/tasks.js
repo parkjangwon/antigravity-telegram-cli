@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 export class BusyError extends Error {
   constructor(message = 'A task is already running for this chat') {
     super(message);
@@ -119,12 +121,16 @@ export class TaskManager {
   #active = new Map();
   #semaphore;
   #maxQueueWaitMs;
+  #overloadThreshold;
+  #overloadQueueWaitMs;
   #maxActive;
   #accepting = true;
   #closeReason = null;
 
   constructor(maxConcurrent = 1, {
     maxQueueWaitMs = 10 * 60 * 1_000,
+    overloadThreshold = 0.75,
+    overloadQueueWaitMs = 2 * 60 * 1_000,
     maxActive = 32,
   } = {}) {
     if (!Number.isFinite(maxQueueWaitMs) || maxQueueWaitMs <= 0) {
@@ -133,8 +139,17 @@ export class TaskManager {
     if (!Number.isSafeInteger(maxActive) || maxActive < maxConcurrent) {
       throw new RangeError('maxActive must be an integer no smaller than maxConcurrent');
     }
+    if (typeof overloadThreshold !== 'number' || !Number.isFinite(overloadThreshold)
+      || overloadThreshold <= 0 || overloadThreshold > 1) {
+      throw new RangeError('overloadThreshold must be a number from 0 (exclusive) to 1 (inclusive)');
+    }
+    if (!Number.isFinite(overloadQueueWaitMs) || overloadQueueWaitMs <= 0) {
+      throw new RangeError('overloadQueueWaitMs must be a positive number');
+    }
     this.#semaphore = new Semaphore(maxConcurrent);
     this.#maxQueueWaitMs = maxQueueWaitMs;
+    this.#overloadThreshold = overloadThreshold;
+    this.#overloadQueueWaitMs = overloadQueueWaitMs;
     this.#maxActive = maxActive;
   }
 
@@ -178,6 +193,7 @@ export class TaskManager {
       error.code = 'TASK_GLOBAL_LIMIT';
       throw error;
     }
+    const queueWaitMs = this.#queueWaitLimitFor(this.#active.size + 1);
     const controller = new AbortController();
     const marker = {
       id: randomUUID().slice(0, 8),
@@ -195,7 +211,7 @@ export class TaskManager {
     let executionClaimed = false;
     const queueTimer = setTimeout(() => {
       controller.abort(new QueueTimeoutError());
-    }, this.#maxQueueWaitMs);
+    }, queueWaitMs);
     const startExecution = () => {
       if (executionStarted) return;
       if (controller.signal.aborted) {
@@ -272,7 +288,12 @@ export class TaskManager {
     }
     return this.#active.size === 0;
   }
+
+  #queueWaitLimitFor(projectedActive) {
+    const overloadCutoff = Math.max(1, Math.ceil(this.#maxActive * this.#overloadThreshold));
+    if (projectedActive < overloadCutoff) return this.#maxQueueWaitMs;
+    return Math.min(this.#maxQueueWaitMs, this.#overloadQueueWaitMs);
+  }
 }
 
 export const _private = { Semaphore };
-import { randomUUID } from 'node:crypto';

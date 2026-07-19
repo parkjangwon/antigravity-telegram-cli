@@ -11,6 +11,7 @@ const REMOTE = `https://github.com/${REPOSITORY}.git`;
 const MANAGED_OWNER = 'agygram-managed-installer';
 const SEMVER_RE = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 const COMMIT_RE = /^[0-9a-f]{40}$/iu;
+const UPDATE_CHECK_UNAVAILABLE_CODE = 'UPDATE_CHECK_UNAVAILABLE';
 
 function run(file, args, cwd) {
   return execFileAsync(file, args, { cwd, windowsHide: true, timeout: 120_000, maxBuffer: 256 * 1024 });
@@ -139,11 +140,26 @@ async function latestRelease() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const response = await fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'agygram-update-check' },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`GitHub release lookup failed (HTTP ${response.status})`);
+    let response;
+    try {
+      response = await fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'agygram-update-check' },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const unavailable = new Error('Latest release lookup is temporarily unavailable');
+      unavailable.code = UPDATE_CHECK_UNAVAILABLE_CODE;
+      unavailable.cause = error;
+      throw unavailable;
+    }
+    if (!response.ok) {
+      if (response.status >= 500 || response.status === 429) {
+        const unavailable = new Error('Latest release lookup is temporarily unavailable');
+        unavailable.code = UPDATE_CHECK_UNAVAILABLE_CODE;
+        throw unavailable;
+      }
+      throw new Error(`GitHub release lookup failed (HTTP ${response.status})`);
+    }
     const release = await response.json();
     if (!release?.immutable || release.draft || release.prerelease || !/^v\d+\.\d+\.\d+$/.test(release.tag_name || '')) {
       throw new Error('Latest GitHub release is not an immutable stable release');
@@ -209,6 +225,7 @@ export async function applySourceUpdate(projectDir) {
 
 export const _private = {
   detectManagedInstallation,
+  latestRelease,
   managedInstallerArgs,
   normalizeRemote,
   scheduleManagedUpdate,

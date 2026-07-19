@@ -92,6 +92,10 @@ test('loadConfig infers the owner only for one private chat', () => {
   assert.equal(config.updateTombstoneRetentionMs, 48 * 60 * 60 * 1_000);
   assert.equal(config.maxUpdateTombstones, 10_000);
   assert.equal(config.maxUpdateTombstoneBytes, 4 * 1024 * 1024);
+  assert.equal(config.agyMinVersion, '1.1.1');
+  assert.equal(config.enforceAgyMinVersion, false);
+  assert.equal(config.agyQueueOverloadThresholdPercent, 75);
+  assert.equal(config.agyQueueOverloadTimeoutMs, 120_000);
 });
 
 test('loadConfig rejects missing or malformed authorization', () => {
@@ -182,6 +186,23 @@ test('loadConfig rejects missing or malformed authorization', () => {
       MAX_AGY_RUNTIME_MINUTES_PER_USER_PER_DAY: '5',
     }, '/tmp'),
     /daily runtime budget must cover/i,
+  );
+  assert.throws(
+    () => loadConfig({
+      BOT_TOKEN: 'x',
+      ALLOWED_CHAT_IDS: '1',
+      AGY_MIN_VERSION: '1.1',
+    }, '/tmp'),
+    /AGY_MIN_VERSION must be a semantic version triplet/,
+  );
+  assert.throws(
+    () => loadConfig({
+      BOT_TOKEN: 'x',
+      ALLOWED_CHAT_IDS: '1',
+      AGY_QUEUE_TIMEOUT_MS: '60000',
+      AGY_QUEUE_OVERLOAD_TIMEOUT_MS: '120000',
+    }, '/tmp'),
+    /must not exceed AGY_QUEUE_TIMEOUT_MS/,
   );
 });
 

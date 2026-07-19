@@ -6,7 +6,7 @@ The bot is a headless, cross-platform control plane for an already installed Ant
 
 It does not aim to turn a same-user coding agent into a hostile multi-tenant sandbox. All allowed Telegram users are trusted operators of the selected workspaces and the effective Antigravity account.
 
-The runtime must be a currently supported Node.js LTS release (Node.js 22 or 24 at this release). The CLI integration described here was locally exercised with `agy 1.1.1`; the test suite uses stubs and does not prove compatibility with every `agy` release or every host credential-store configuration.
+The runtime must be a currently supported Node.js LTS release (Node.js 22 or 24 at this release). Startup checks `AGY_MIN_VERSION=1.1.1` by default, but runs in warn-only mode unless `AGY_ENFORCE_MIN_VERSION=true` is explicitly enabled. The test suite uses stubs and does not prove compatibility with every `agy` release or every host credential-store configuration.
 
 ## Trust and process boundary
 
@@ -198,6 +198,7 @@ This is update idempotency and explicit recovery, not a transaction spanning Tel
 - Global and per-Telegram-user pending admission is bounded before a durable enqueue.
 - A global semaphore limits concurrent `agy` processes (`MAX_CONCURRENT_AGY=1` by default).
 - Waiting for that semaphore is bounded (`AGY_QUEUE_TIMEOUT_MS=600000` by default).
+- When admitted backlog crosses `AGY_QUEUE_OVERLOAD_THRESHOLD_PERCENT` (75% by default), queue wait is shortened to `AGY_QUEUE_OVERLOAD_TIMEOUT_MS` (120000 by default) to shed stale work earlier.
 - A canonical-workspace mutex serializes runs from different chats/topics that select the same workspace.
 - Authentication is globally exclusive and cannot overlap coding work.
 - `/cancel` aborts the current session and kills its child process tree.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.15 — 2026-07-19
+
+- Add startup agy version compatibility guardrails with warn-first defaults, plus configurable strict enforcement.
+- Add adaptive queue overload handling so backlog pressure fails fast instead of making users wait on stale work.
+- Reduce user-facing friction by softening update-check outage messaging and by throttling repeated startup warnings.
+
 ## 0.3.14 — 2026-07-19
 
 - Add inline buttons for confirmation and retry on failed, cancelled, or interrupted jobs.

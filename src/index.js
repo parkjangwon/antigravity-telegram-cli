@@ -151,13 +151,24 @@ const HELP_TEXT = `agygram
 문서나 사진을 보내면 안전한 업로드 디렉터리에 저장한 뒤 agy가 읽도록 전달합니다.`;
 
 const PRIVATE_CLEAR_SWEEP_LIMIT = 5_000;
+const WARN_COOLDOWN_MS = 6 * 60 * 60 * 1_000;
+const warningCooldowns = new Map();
+
+function warnWithCooldown(key, message, cooldownMs = WARN_COOLDOWN_MS) {
+  const now = Date.now();
+  const nextAllowed = warningCooldowns.get(key) || 0;
+  if (now < nextAllowed) return false;
+  warningCooldowns.set(key, now + cooldownMs);
+  console.warn(message);
+  return true;
+}
 
 function formatError(error) {
   if (error instanceof BusyError) {
     return '이미 이 채팅의 작업이 진행 중입니다. 중단하려면 /cancel 을 사용하세요.';
   }
   if (error?.code === 'TASK_QUEUE_TIMEOUT') {
-    return '작업이 대기열 제한 시간을 초과해 실행 전에 중단되었습니다. /retry <작업ID>로 다시 시도할 수 있습니다.';
+    return '서버가 바빠 작업이 대기열 제한 시간을 넘어 실행 전에 중단되었습니다. 1~2분 뒤 다시 시도하거나 /status 로 현재 상태를 확인하세요.';
   }
   if (error?.code === 'JOB_CONTEXT_CHANGED') return error.message;
   if (error instanceof UsageLimitError) {
@@ -182,6 +193,8 @@ function formatError(error) {
     switch (error.code) {
       case 'AGY_NOT_FOUND':
         return 'agy 실행 파일을 찾지 못했습니다. 서버의 PATH 또는 AGY_BIN을 확인하세요.';
+      case 'AGY_VERSION_UNSUPPORTED':
+        return '지원되지 않는 agy 버전입니다. AGY_MIN_VERSION 이상으로 업그레이드하세요.';
       case 'AGY_AUTH_REQUIRED':
         return 'agy 인증이 필요하거나 만료되었습니다. /auth 를 실행하세요.';
       case 'AGY_CANCELLED':
@@ -396,6 +409,24 @@ async function main() {
     runLogMaxFileBytes: config.maxAgyRunLogFileBytes,
     environment: agyEnvironment,
   });
+  const agyCompatibility = await agy.assertCompatibleVersion({
+    cwd: defaultWorkspace,
+    minVersion: config.agyMinVersion,
+    enforce: config.enforceAgyMinVersion,
+  });
+  if (agyCompatibility.ok === null) {
+    warnWithCooldown(
+      'agy-version-unparseable',
+      `Could not parse agy version output ("${agyCompatibility.raw}"). ` +
+      `Skipping strict version gate; expected minimum is ${config.agyMinVersion}.`,
+    );
+  } else if (!agyCompatibility.ok) {
+    warnWithCooldown(
+      'agy-version-unsupported',
+      `Unsupported agy version detected (${agyCompatibility.raw}). ` +
+      `Configured minimum is ${config.agyMinVersion}. Continuing because AGY_ENFORCE_MIN_VERSION=false.`,
+    );
+  }
   const auth = new AuthManager({
     bin: agyExecutable,
     timeoutMs: config.authTimeoutMs,
@@ -407,6 +438,8 @@ async function main() {
   const authOwners = new Map();
   const tasks = new TaskManager(config.maxConcurrentAgy, {
     maxQueueWaitMs: config.agyQueueTimeoutMs,
+    overloadThreshold: config.agyQueueOverloadThresholdPercent / 100,
+    overloadQueueWaitMs: config.agyQueueOverloadTimeoutMs,
     maxActive: Math.max(config.maxConcurrentAgy, config.maxPendingAgyJobs),
   });
   runtimeTasks = tasks;
@@ -1279,9 +1312,12 @@ async function main() {
       );
       if (result.restart !== false) setTimeout(() => process.exit(75), 300).unref?.();
     } catch (error) {
+      const updateMessage = error?.code === 'UPDATE_CHECK_UNAVAILABLE'
+        ? '업데이트 서버에 잠시 연결되지 않아 확인을 완료하지 못했습니다.\n잠시 후 /update 를 다시 실행하세요.'
+        : `업데이트하지 않았습니다.\n\n${error.message}`;
       await sendPanel(
         ctx,
-        `업데이트하지 않았습니다.\n\n${error.message}`,
+        updateMessage,
         [
           [
             { label: '🩺 점검', action: 'doctor' },
