@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.16 — 2026-07-19
+## 3.1.7 — 2026-07-19
 
 - Fix release CI failure by extending the service `.env` allowlist to include the new version-guard and queue-overload configuration keys.
 
