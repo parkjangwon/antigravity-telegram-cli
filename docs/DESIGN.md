@@ -217,7 +217,7 @@ Maintenance runs at startup and hourly. It removes entries older than `UPLOAD_RE
 
 ## Telegram delivery
 
-Long text is split below Telegram's 4,096-character limit without Markdown parse mode. Results above `MAX_INLINE_RESPONSE_CHARS` are sent as an in-memory UTF-8 document.
+Long text is split below Telegram's 4,096-character limit. Single-chunk responses get best-effort Markdown-to-Telegram HTML rendering; multi-chunk deliveries stay plain text to avoid malformed rich-text boundaries. Results above `MAX_INLINE_RESPONSE_CHARS` are sent as an in-memory UTF-8 document.
 
 The result is persisted before delivery. Result/long-message delivery retries rate limits, 5xx responses, and recognized transient network failures up to four attempts, honoring `retry_after` and bounded exponential backoff. A 5xx or network loss is ambiguous and can create a duplicate on retry. If a multipart delivery fails, the stored response remains available through `/last` rather than assuming exactly-once delivery.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.8 — 2026-07-19
+
+- Render single-chunk Markdown responses as Telegram HTML (`parse_mode: HTML`) so bold/code/link/code-block output displays correctly in chat.
+- Keep multi-chunk deliveries in plain text to avoid malformed rich-text boundaries when Telegram messages are split.
+
 ## 3.1.7 — 2026-07-19
 
 - Fix release CI failure by extending the service `.env` allowlist to include the new version-guard and queue-overload configuration keys.

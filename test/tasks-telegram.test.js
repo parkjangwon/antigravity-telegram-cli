@@ -7,6 +7,7 @@ import test from 'node:test';
 import { BusyError, KeyedMutex, QueueTimeoutError, TaskManager } from '../src/tasks.js';
 import { runWithUsage } from '../src/usage-store.js';
 import {
+  _private,
   abortActiveTelegramCalls,
   classifyUpdateAge,
   guardTelegramClient,
@@ -576,6 +577,48 @@ test('replyLong retries its Telegram call and preserves final options', async ()
   assert.deepEqual(calls[1][1], { message_thread_id: 77 });
   assert.equal(report.retries, 1);
   assert.equal(report.duplicateRisk, true);
+});
+
+test('replyLong renders single-chunk markdown with Telegram HTML parse mode', async () => {
+  let captured;
+  const ctx = {
+    chat: { id: 42 },
+    telegram: {
+      callApi: async (...args) => {
+        captured = args;
+        return { message_id: 1 };
+      },
+    },
+    reply: async () => assert.fail('high-level fallback must not be used'),
+  };
+
+  await replyLong(ctx, '**Bold** `code` [link](https://example.com)');
+  assert.equal(captured[0], 'sendMessage');
+  assert.equal(captured[1].parse_mode, 'HTML');
+  assert.equal(
+    captured[1].text,
+    '<b>Bold</b> <code>code</code> <a href="https://example.com">link</a>',
+  );
+});
+
+test('sendLong keeps multi-chunk text in plain mode to avoid broken rich-text boundaries', async () => {
+  const calls = [];
+  const telegram = {
+    sendMessage: async (...args) => calls.push(args),
+  };
+
+  await sendLong(telegram, 1, `**headline**\n${'x'.repeat(7_900)}`);
+  assert.ok(calls.length > 1);
+  assert.match(calls[0][1], /^\*\*headline\*\*/);
+  assert.equal(calls[0][2]?.parse_mode, undefined);
+});
+
+test('markdownToTelegramHtml converts common markdown patterns', () => {
+  const rendered = _private.markdownToTelegramHtml('# Title\n\n```js\nconst x = 1;\n```');
+  assert.equal(
+    rendered,
+    '<b>Title</b>\n\n<pre><code class="language-js">const x = 1;\n</code></pre>',
+  );
 });
 
 test('sendLong exposes confirmed chunks and ambiguity after partial failure', async () => {

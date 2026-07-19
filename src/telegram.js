@@ -3,6 +3,9 @@ import { stat } from 'node:fs/promises';
 
 const TELEGRAM_TEXT_LIMIT = 4_096;
 const SAFE_CHUNK_SIZE = 3_800;
+const TELEGRAM_HTML_PARSE_MODE = 'HTML';
+const TELEGRAM_MARKDOWN_HINT =
+  /(^|\n)\s{0,3}#{1,6}\s|\*\*[^*\n]+\*\*|`[^`\n]+`|```[\s\S]*?```|\[[^\]\n]+\]\((?:https?:\/\/|tg:\/\/)[^)]+\)/u;
 
 const DEFAULT_RETRY_OPTIONS = Object.freeze({
   maxAttempts: 4,
@@ -35,6 +38,53 @@ function abortReason(signal, fallback = 'Telegram request cancelled') {
   return signal?.reason instanceof Error
     ? signal.reason
     : Object.assign(new Error(fallback), { name: 'AbortError', code: 'ABORT_ERR' });
+}
+
+function escapeTelegramHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function normalizeTelegramCodeLanguage(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9#+-]/gu, '');
+}
+
+function markdownToTelegramHtml(markdown) {
+  const source = String(markdown ?? '');
+  if (!source || !TELEGRAM_MARKDOWN_HINT.test(source)) return null;
+
+  const fences = [];
+  const withFenceTokens = source.replace(/```([^\n`]*)\n([\s\S]*?)```/gu, (_m, language, code) => {
+    const index = fences.push({ language, code }) - 1;
+    return `\u0000FENCE_${index}\u0000`;
+  });
+
+  let html = escapeTelegramHtml(withFenceTokens);
+  html = html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|tg:\/\/[^\s)]+)\)/gu, (_m, label, url) =>
+    `<a href="${escapeTelegramHtml(url)}">${label}</a>`);
+  html = html.replace(/^#{1,6}\s+(.+)$/gmu, '<b>$1</b>');
+  html = html.replace(/\*\*([^\n*][\s\S]*?[^\n*])\*\*/gu, '<b>$1</b>');
+  html = html.replace(/`([^`\n]+)`/gu, '<code>$1</code>');
+  html = html.replace(/\u0000FENCE_(\d+)\u0000/gu, (_m, index) => {
+    const { language, code } = fences[Number(index)] || {};
+    const escapedCode = escapeTelegramHtml(code || '');
+    const normalized = normalizeTelegramCodeLanguage(language);
+    if (normalized) return `<pre><code class="language-${normalized}">${escapedCode}</code></pre>`;
+    return `<pre>${escapedCode}</pre>`;
+  });
+  return html;
+}
+
+function formatTelegramChunk(chunk, allowFormatting) {
+  if (!allowFormatting) return { text: chunk, parseMode: undefined };
+  const html = markdownToTelegramHtml(chunk);
+  if (!html) return { text: chunk, parseMode: undefined };
+  return { text: html, parseMode: TELEGRAM_HTML_PARSE_MODE };
 }
 
 function waitForAbortable(promise, signal) {
@@ -629,13 +679,18 @@ export async function replyLong(ctx, text, extra = undefined, deliveryOptions = 
     parts: chunks,
     deliveryOptions,
     deliver: (chunk, index, signal) => {
-      const options = index === chunks.length - 1 ? extra : undefined;
+      const formatted = formatTelegramChunk(chunk, chunks.length === 1);
+      const options = {
+        ...(index === chunks.length - 1 ? extra || {} : {}),
+      };
+      if (formatted.parseMode && options.parse_mode == null) options.parse_mode = formatted.parseMode;
+      const finalOptions = Object.keys(options).length > 0 ? options : undefined;
       return callContextApi(
         ctx,
         'sendMessage',
-        { ...(options || {}), text: chunk },
+        { ...(finalOptions || {}), text: formatted.text },
         signal,
-        () => ctx.reply(chunk, options),
+        () => ctx.reply(formatted.text, finalOptions),
       ).then((result) => recordContextTelegramResult(ctx, result));
     },
   });
@@ -667,16 +722,19 @@ export async function sendLong(
     parts: chunks,
     deliveryOptions,
     deliver: (chunk, index, signal) => {
+      const formatted = formatTelegramChunk(chunk, chunks.length === 1);
       const options = {
         ...(commonExtra || {}),
         ...(index === chunks.length - 1 ? lastExtra || {} : {}),
       };
+      if (formatted.parseMode && options.parse_mode == null) options.parse_mode = formatted.parseMode;
+      const finalOptions = Object.keys(options).length > 0 ? options : undefined;
       return callTelegramApi(
         telegram,
         'sendMessage',
-        { chat_id: chatId, text: chunk, ...options },
+        { chat_id: chatId, text: formatted.text, ...(finalOptions || {}) },
         signal,
-        () => telegram.sendMessage(chatId, chunk, options),
+        () => telegram.sendMessage(chatId, formatted.text, finalOptions),
       );
     },
   });
@@ -827,4 +885,5 @@ export const _private = {
   SAFE_CHUNK_SIZE,
   DEFAULT_RETRY_OPTIONS,
   retryDelayMs,
+  markdownToTelegramHtml,
 };
