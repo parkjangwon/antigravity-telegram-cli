@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.9 — 2026-07-19
+
+- Fix release CI by removing a stale hardcoded version literal from `test/version.test.js`; the test now validates strict SemVer and cross-file version consistency without per-release test edits.
+
 ## 3.1.8 — 2026-07-19
 
 - Render single-chunk Markdown responses as Telegram HTML (`parse_mode: HTML`) so bold/code/link/code-block output displays correctly in chat.
