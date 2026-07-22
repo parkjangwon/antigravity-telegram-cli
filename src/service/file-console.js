@@ -51,7 +51,13 @@ function fileSize(logFile) {
 }
 
 export function formatLogLine(level, args, now = new Date()) {
-  return `${now.toISOString()} ${level.toUpperCase()} ${util.format(...args)}\n`;
+  const entry = {
+    time: now.toISOString(),
+    level: level === 'log' ? 'info' : level,
+    pid: process.pid,
+    msg: util.format(...args),
+  };
+  return `${JSON.stringify(entry)}\n`;
 }
 
 export function appendBoundedLog(logFile, value, maxBytes = DEFAULT_MAX_BYTES) {

@@ -4,8 +4,10 @@ import { UsageLimitError } from '../usage-store.js';
 
 export const PRIVATE_CLEAR_SWEEP_LIMIT = 5_000;
 export const WARN_COOLDOWN_MS = 6 * 60 * 60 * 1_000;
+export const NOTIFY_COOLDOWN_MS = 60 * 60 * 1_000;
 
 const warningCooldowns = new Map();
+const notifyCooldowns = new Map();
 
 export function warnWithCooldown(key, message, cooldownMs = WARN_COOLDOWN_MS) {
   const now = Date.now();
@@ -14,6 +16,26 @@ export function warnWithCooldown(key, message, cooldownMs = WARN_COOLDOWN_MS) {
   warningCooldowns.set(key, now + cooldownMs);
   console.warn(message);
   return true;
+}
+
+/**
+ * Send a Telegram notification to the first available owner chat, with a
+ * per-key cooldown to prevent flooding. Returns true if the message was sent.
+ */
+export async function notifyOwnerWithCooldown(bot, ownerChatIds, key, text, cooldownMs = NOTIFY_COOLDOWN_MS) {
+  const now = Date.now();
+  const nextAllowed = notifyCooldowns.get(key) || 0;
+  if (now < nextAllowed) return false;
+  notifyCooldowns.set(key, now + cooldownMs);
+  const chatId = [...ownerChatIds][0];
+  if (!chatId || !bot?.telegram) return false;
+  try {
+    await bot.telegram.sendMessage(chatId, text);
+    return true;
+  } catch (error) {
+    console.warn('Owner notification failed', { key, message: error?.message });
+    return false;
+  }
 }
 
 export function formatError(error) {

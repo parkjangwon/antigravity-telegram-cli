@@ -450,6 +450,18 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
     );
   }
 
+  const agyMaxOutputBytes = parseInteger(env.AGY_MAX_OUTPUT_BYTES, 2 * 1024 * 1024, {
+    min: 16 * 1024,
+    max: 50 * 1024 * 1024,
+  });
+  const maxResultStorageBytes = parseInteger(env.MAX_RESULT_STORAGE_BYTES, 200 * 1024 * 1024, {
+    min: 1024 * 1024,
+    max: 10 * 1024 * 1024 * 1024,
+  });
+  if (maxResultStorageBytes < agyMaxOutputBytes) {
+    throw new Error('MAX_RESULT_STORAGE_BYTES must be at least AGY_MAX_OUTPUT_BYTES');
+  }
+
   return {
     botToken,
     allowedChatIds,
@@ -493,10 +505,7 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
     uploadsDir,
     resultsDir,
     resultRetentionHours,
-    maxResultStorageBytes: parseInteger(env.MAX_RESULT_STORAGE_BYTES, 200 * 1024 * 1024, {
-      min: 1024 * 1024,
-      max: 10 * 1024 * 1024 * 1024,
-    }),
+    maxResultStorageBytes,
     agyRunLogDir,
     agyRunLogRetentionHours: parseInteger(env.AGY_RUN_LOG_RETENTION_HOURS, 24, {
       min: 1,
@@ -524,10 +533,7 @@ export function loadConfig(env = process.env, baseDir = process.cwd()) {
       min: 60_000,
       max: 3_600_000,
     }),
-    agyMaxOutputBytes: parseInteger(env.AGY_MAX_OUTPUT_BYTES, 2 * 1024 * 1024, {
-      min: 16 * 1024,
-      max: 50 * 1024 * 1024,
-    }),
+    agyMaxOutputBytes,
     captureAgyRunMetadata: parseBoolean(env.AGY_CAPTURE_RUN_METADATA, true),
     keepAgyRunLogs: parseBoolean(env.AGY_KEEP_RUN_LOGS, false),
     defaultMode,

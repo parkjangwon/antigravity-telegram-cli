@@ -83,6 +83,10 @@ try {
   process.on('uncaughtExceptionMonitor', (error, origin) => {
     console.error(`Uncaught exception (${origin})`, error);
   });
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled rejection', reason);
+    throw reason instanceof Error ? reason : new Error(String(reason));
+  });
   await import('../index.js');
 } catch (error) {
   if (loggerReady) {

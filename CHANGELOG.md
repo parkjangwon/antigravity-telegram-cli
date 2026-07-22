@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.2.0 — 2026-07-23
+
+- Add structured JSON-lines service logging (`{time, level, pid, msg}`) replacing the previous free-text format.
+- Add a file-based health snapshot (`DATA_DIR/health.json`) written every maintenance cycle for external monitors.
+- Add `agygram backup` CLI command to snapshot state files (`sessions.json`, `jobs.json`, `usage.json`, `health.json`).
+- Add owner Telegram notification on agy execution failures (1-hour per-error-code cooldown).
+- Add `unhandledRejection` logging in the service runner before the default crash behavior.
+- Add memory/uptime resource logging and POSIX orphan-process detection to the hourly maintenance cycle.
+- Add actionable error messages for permanent Telegram failures (401 Unauthorized, 409 Conflict) at startup.
+- Add `MAX_RESULT_STORAGE_BYTES >= AGY_MAX_OUTPUT_BYTES` cross-validation to `loadConfig()`.
+- Add `activeCount`/`queuedCount` getters to `TaskManager` and `running`/`waiting` to the internal semaphore.
+- Introduce ESLint (flat config) with a `npm run lint` script; fix two missing imports in `src/bot/handlers.js` that caused `ReferenceError` on `/reset` and `/workspace <path>`.
+- Remove unused imports in `job-store.js`, `state.js`, and `usage-store.js`.
+
 ## 3.1.10 — 2026-07-19
 
 - Internal cleanup: split the Telegram bot orchestration out of `src/index.js` into `src/bot/{app,control,panels,jobs,handlers,util}.js`.

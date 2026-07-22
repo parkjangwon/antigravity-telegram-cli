@@ -1,6 +1,6 @@
 {
   "name": "agygram",
-  "version": "3.1.10",
+  "version": "3.2.0",
   "description": "Headless, cross-platform Telegram controller for Google Antigravity CLI",
   "license": "MIT",
   "repository": {
@@ -37,6 +37,7 @@
     "doctor": "node src/doctor.js",
     "service:dry-run": "node bin/agygram.js service install --dry-run",
     "check:release": "node scripts/check-release.js",
+    "lint": "eslint src/ bin/ scripts/ test/",
     "test": "node --test",
     "check": "node scripts/check.js"
   },
@@ -47,5 +48,9 @@
     "@homebridge/node-pty-prebuilt-multiarch": "0.13.1",
     "dotenv": "17.4.2",
     "telegraf": "4.16.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0"
   }
 }

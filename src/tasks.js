@@ -57,6 +57,14 @@ class Semaphore {
       });
     }
   }
+
+  get running() {
+    return this.#running;
+  }
+
+  get waiting() {
+    return this.#waiting.length;
+  }
 }
 
 export class KeyedMutex {
@@ -159,6 +167,14 @@ export class TaskManager {
 
   hasAnyActive() {
     return this.#active.size > 0;
+  }
+
+  get activeCount() {
+    return this.#active.size;
+  }
+
+  get queuedCount() {
+    return this.#semaphore.waiting;
   }
 
   get closed() {

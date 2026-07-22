@@ -1,13 +1,14 @@
 import path from 'node:path';
 import dotenv from 'dotenv';
 
-import { cleanupAgyRunLogs } from './agy.js';
+import { cleanupAgyRunLogs, _private as agyPrivate } from './agy.js';
 import { ActivityTracker } from './activity.js';
 import { cleanupAtomicArtifacts } from './artifacts.js';
 import { runTelegramApp } from './bot/app.js';
 import { detach } from './bot/util.js';
 import { loadConfig } from './config.js';
 import { cleanupExpiredUploads } from './files.js';
+import { HealthWriter } from './health.js';
 import { acquireInstanceLock } from './instance-lock.js';
 import { JobStore } from './job-store.js';
 import {
@@ -32,6 +33,7 @@ import {
 import { StateStore } from './state.js';
 import {
   hasActiveTelegramCalls,
+  classifyTelegramError,
   shutdownTelegramCalls,
   waitForTelegramIdle,
 } from './telegram.js';
@@ -179,11 +181,38 @@ async function main() {
       retentionDays: config.usageRetentionDays,
       maxBytes: config.usageStoreMaxBytes,
     }).init();
+    const health = new HealthWriter(config.dataDir);
     const runMaintenance = () => Promise.all([
       cleanupRuntime(),
       state.pruneExpired().catch((error) => console.warn('State cleanup failed', error.message)),
       usage.prune().catch((error) => console.warn('Usage cleanup failed', error.message)),
-    ]);
+      health.write().catch((error) => console.warn('Health snapshot failed', error.message)),
+    ]).then(() => {
+      const mem = process.memoryUsage();
+      console.log(
+        'Maintenance cycle complete · rss %d MiB · heap %d/%d MiB · external %d MiB · uptime %d s',
+        Math.round(mem.rss / 1024 / 1024),
+        Math.round(mem.heapUsed / 1024 / 1024),
+        Math.round(mem.heapTotal / 1024 / 1024),
+        Math.round(mem.external / 1024 / 1024),
+        Math.round(process.uptime()),
+      );
+      if (process.platform !== 'win32') {
+        try {
+          const table = agyPrivate.snapshotPosixProcessTable({});
+          const orphans = agyPrivate.findDescendantProcesses(table, process.pid);
+          if (orphans.length > 0 && !runtimeTasks?.hasAnyActive()) {
+            console.warn(
+              'Detected %d descendant process(es) with no active agy task — possible orphan leak: %s',
+              orphans.length,
+              orphans.map((p) => `pid=${p.pid}`).join(', '),
+            );
+          }
+        } catch {
+          // Process table snapshot is best-effort; skip on failure.
+        }
+      }
+    });
     maintenanceTimer = setInterval(() => {
       detach(runMaintenance(), 'runtime-maintenance', backgroundActivities);
     }, 60 * 60 * 1_000);
@@ -206,6 +235,12 @@ async function main() {
         runtimeAuth = auth;
         runtimeAdmissions = admissions;
         runtimeLifecycle = lifecycle;
+        health.register(() => ({
+          activeTasks: tasks?.activeCount ?? 0,
+          queuedTasks: tasks?.queuedCount ?? 0,
+          pendingAdmissions: admissions?.size ?? 0,
+          stopping: lifecycle?.stopping ?? false,
+        }));
       },
     });
   } finally {
@@ -251,6 +286,19 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal startup error', error);
+  const classification = classifyTelegramError(error);
+  if (classification.status === 401) {
+    console.error(
+      'Fatal: Telegram returned 401 Unauthorized. The BOT_TOKEN is invalid or revoked. '
+      + 'Verify the token with @BotFather and update .env. Restarting will not help until the token is fixed.',
+    );
+  } else if (classification.status === 409) {
+    console.error(
+      'Fatal: Telegram returned 409 Conflict. Another bot instance is polling with the same token. '
+      + 'Stop the other instance or check for a stale process. Restarting will not help until the conflict is resolved.',
+    );
+  } else {
+    console.error('Fatal startup error', error);
+  }
   process.exitCode = 1;
 });

@@ -1346,10 +1346,12 @@ export const _private = {
   compareSemverTriplets,
   cleanResponse,
   extractSemverTriplet,
+  findDescendantProcesses,
   findIdInObject,
   parseSemverTriplet,
   quoteWindowsArgument,
   readBoundedRunLog,
   readRunMetadata,
+  snapshotPosixProcessTable,
   terminateProcess,
 };

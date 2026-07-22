@@ -12,7 +12,7 @@ import {
   sessionKey,
   startTyping,
 } from '../telegram.js';
-import { detach, formatError, normalizeChoice } from './util.js';
+import { detach, formatError, normalizeChoice, notifyOwnerWithCooldown } from './util.js';
 
 /** Durable agy request scheduling, execution, retry, and recovery notices. */
 export function attachJobs(s) {
@@ -185,10 +185,18 @@ export function attachJobs(s) {
       });
     } catch (error) {
       console.error('Request failed', { name: error.name, code: error.code, message: error.message });
+      const cancelled = error?.code === 'AGY_CANCELLED' || /cancelled|canceled/i.test(error?.message || '');
+      if (!cancelled && error?.code && error.code !== 'AGY_AUTH_REQUIRED') {
+        notifyOwnerWithCooldown(
+          s.bot,
+          config.ownerUserIds,
+          `agy-failure-${error.code}`,
+          `⚠️ agy 장애 알림: ${error.code}\n${error.message || ''}\n시각: ${new Date().toISOString()}`,
+        ).catch(() => {});
+      }
       if (journalJob) {
         const persisted = jobs.get(journalJob.id);
         if (persisted && ['queued', 'running'].includes(persisted.status)) {
-          const cancelled = error?.code === 'AGY_CANCELLED' || /cancelled|canceled/i.test(error?.message || '');
           await jobs.transition(journalJob.id, cancelled ? 'cancelled' : 'failed', { error }).catch(
             (journalError) => console.error('Job journal failure transition failed', journalError),
           );

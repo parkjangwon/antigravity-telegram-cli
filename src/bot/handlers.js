@@ -11,8 +11,10 @@ import {
   replyLong,
   sessionKey,
   startTyping,
+  storageScope,
 } from '../telegram.js';
 import { clearChatUploads } from '../files.js';
+import { resolveWorkspace } from '../workspace.js';
 import {
   formatError,
   normalizeChoice,

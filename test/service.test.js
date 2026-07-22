@@ -690,7 +690,7 @@ test('Windows service log formatting and one-generation rotation are bounded', a
     assert.equal((await readFile(`${logFile}.1`)).length, 5);
     assert.equal(
       formatLogLine('warn', ['hello %s', 'world'], new Date('2026-01-02T03:04:05.000Z')),
-      '2026-01-02T03:04:05.000Z WARN hello world\n',
+      `${JSON.stringify({ time: '2026-01-02T03:04:05.000Z', level: 'warn', pid: process.pid, msg: 'hello world' })}\n`,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

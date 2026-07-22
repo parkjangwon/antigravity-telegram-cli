@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import dotenv from 'dotenv';
@@ -24,6 +24,7 @@ const USAGE = `agygram — agygram operations
 Usage:
   agygram setup [--config-file <path>] [--data-dir <path>] [--workspace-dir <path>] [--agy-bin <path>]
   agygram doctor [--config-file <path>] [--data-dir <path>]
+  agygram backup [--config-file <path>] [--data-dir <path>] [--output <path>]
   agygram service install [--dry-run] [--config-file <path>] [--data-dir <path>]
   agygram service uninstall [--dry-run] [--config-file <path>] [--data-dir <path>]
   agygram service status [--dry-run] [--config-file <path>] [--data-dir <path>]
@@ -272,6 +273,58 @@ async function runDoctor({
   });
 }
 
+const BACKUP_FILES = ['sessions.json', 'jobs.json', 'usage.json', 'health.json'];
+
+function runBackup(args) {
+  const options = parseFileRunnerArguments(args);
+  const envFile = resolveRuntimeEnvFile({
+    projectDir: PROJECT_DIR,
+    configuredEnvFile: options.envFile,
+  });
+  if (process.platform !== 'win32') {
+    // Best-effort trust check; backup is read-only.
+    try {
+      dotenv.config({ path: envFile, quiet: true });
+    } catch {
+      // Proceed without .env if unavailable.
+    }
+  } else {
+    dotenv.config({ path: envFile, quiet: true });
+  }
+  if (options.dataDir) process.env.DATA_DIR = options.dataDir;
+  const dataDir = path.resolve(
+    PROJECT_DIR,
+    process.env.DATA_DIR || (process.platform === 'win32' && process.env.LOCALAPPDATA
+      ? path.join(process.env.LOCALAPPDATA, 'agygram', 'data')
+      : 'data'),
+  );
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const outputArg = args.includes('--output') ? args[args.indexOf('--output') + 1] : null;
+  const backupDir = outputArg
+    ? path.resolve(outputArg)
+    : path.join(dataDir, `backup-${timestamp}`);
+
+  mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+
+  const backed = [];
+  for (const file of BACKUP_FILES) {
+    const source = path.join(dataDir, file);
+    if (existsSync(source)) {
+      copyFileSync(source, path.join(backupDir, file));
+      backed.push(file);
+    }
+  }
+
+  if (backed.length === 0) {
+    process.stderr.write(`No state files found in ${dataDir}\n`);
+    return 1;
+  }
+  process.stdout.write(`Backed up ${backed.length} file(s) to ${backupDir}\n`);
+  for (const file of backed) process.stdout.write(`  ${file}\n`);
+  return 0;
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const isHelp = (value) => value === '-h' || value === '--help';
   if (argv.length === 1 && (argv[0] === '-v' || argv[0] === '--version')) {
@@ -299,6 +352,13 @@ export async function main(argv = process.argv.slice(2)) {
     }
     const doctorOptions = parseFileRunnerArguments(commandArguments);
     return runDoctor(doctorOptions);
+  }
+  if (command === 'backup') {
+    if (commandArguments.length === 1 && isHelp(commandArguments[0])) {
+      process.stdout.write(USAGE);
+      return 0;
+    }
+    return runBackup(commandArguments);
   }
   const [action, ...rest] = commandArguments;
   if (
